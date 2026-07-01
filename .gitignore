@@ -1,0 +1,47 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go build outputs
+bin/
+tmp/
+dist/
+build/
+*.exe
+*.out
+*.test
+coverage.out
+coverage.html
+
+# Go workspace / vendor
+vendor/
+go.work
+go.work.sum
+
+# Air hot reload
+.air.toml.tmp
+
+# Logs
+*.log
+logs/
+
+# Docker / local runtime
+docker-data/
+*.pid
+
+# Generated duplicate path caused by wrong protoc output
+github.com/
+
+# Optional local files
+README.local.md
