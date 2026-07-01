@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+bin
+tmp
+coverage.out
+*.log
+.DS_Store
+README.local.md

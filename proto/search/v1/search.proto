@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package nexusestate.search.v1;
+
+option go_package = "github.com/NexusEstate/nexus-estate-search-service/gen/search/v1;searchv1";
+
+service SearchService {
+  rpc SearchProperties(SearchPropertiesRequest) returns (SearchPropertiesResponse);
+}
+
+message SearchPropertiesRequest {
+  string keyword = 1;
+  string city = 2;
+  string district = 3;
+
+  optional double min_price = 4;
+  optional double max_price = 5;
+
+  optional double min_area = 6;
+  optional double max_area = 7;
+
+  optional double latitude = 8;
+  optional double longitude = 9;
+  optional double radius_km = 10;
+
+  int32 page = 11;
+  int32 limit = 12;
+}
+
+message SearchPropertiesResponse {
+  repeated PropertySearchItem items = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 limit = 4;
+  int64 total_pages = 5;
+}
+
+message PropertySearchItem {
+  string id = 1;
+  string title = 2;
+  string slug = 3;
+  string description = 4;
+  string type = 5;
+  string purpose = 6;
+  double price = 7;
+  double area = 8;
+  string city = 9;
+  string district = 10;
+  string ward = 11;
+  string address = 12;
+  double latitude = 13;
+  double longitude = 14;
+  repeated string images = 15;
+  string published_at = 16;
+}
