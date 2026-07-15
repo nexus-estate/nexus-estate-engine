@@ -1,0 +1,40 @@
+# search-service — Agent Rules
+
+## This file supplements the root .clinerules file.
+
+## Overview
+
+This is a Go-based search service for Nexus Estate. It provides full-text search and faceted search capabilities. It must align with the contracts defined in `shared-contracts`.
+
+## Core Compliance Rules
+
+### 1. Proto Contract Compliance
+
+- gRPC service definitions are defined in `shared-contracts/proto/search/search.proto`.
+- The proto file in this repo (if exists) must be a copy of the one in `shared-contracts` — any changes MUST start in `shared-contracts` first.
+- When the proto in `shared-contracts` changes, update this repo's proto and regenerate.
+
+### 2. Multi-Repo Architecture
+
+- This is an independent repo. `shared-contracts` is consumed in one of these ways:
+  - **Git submodule**: pin to a specific version of shared-contracts (recommended for proto files).
+  - **Download during CI**: fetch the proto file from GitHub.
+  - **Copy on update**: manually copy when contracts change.
+- Do NOT use local file system paths (`../shared-contracts`) in CI/CD.
+
+### 3. Proto Workflow
+
+1. Define/change the proto in `shared-contracts/proto/search/search.proto`.
+2. Update this repo's proto file (via submodule update or copy).
+3. Regenerate Go code: `make gen-proto` (or equivalent).
+4. Update service implementation to match.
+
+### 4. Go Module Dependency
+
+- For Go client libraries (future), use `github.com/tiesn/nexus-estate-shared-contracts/packages/go-clients` as a Go module dependency.
+- Tagged releases of shared-contracts should be consumable via `go get`.
+
+### 5. Prohibited
+
+- Do NOT define proto services here that belong in `shared-contracts`.
+- Do NOT use `file:` or relative path references to shared-contracts outside this repo.
