@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeConfig(t *testing.T) {
-	for _, tc := range []struct{ runtime, port string }{{"search", "50052"}, {"engine", "50051"}, {"worker", "50052"}} {
+	for _, tc := range []struct{ runtime, port string }{{"search", "50052"}, {"engine", "50051"}, {"worker", ""}} {
 		t.Run(tc.runtime, func(t *testing.T) {
 			v := viper.New()
 			v.Set("APP_ENV", "production")

@@ -38,5 +38,6 @@ included. Add feature modules under `internal/<domain>` and compose them explici
 when their actual use cases and contracts are ready.
 
 CI owns builds and GHCR publication. The infra repository owns immutable image
-selection and ArgoCD rollout. Initially roll out Search only; retain old images and
-revert the infra image reference if staging or production verification fails.
+selection and ArgoCD rollout. Initially roll out Search only; retain old images
+and the temporary legacy Service aliases, and revert the infra image reference if
+staging or production verification fails.

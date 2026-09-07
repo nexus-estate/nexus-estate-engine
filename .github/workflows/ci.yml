@@ -61,16 +61,132 @@ jobs:
           cache: true
       - run: make build
 
-  docker:
+  integration-search:
+    name: Search integration
     runs-on: ubuntu-latest
     needs: [quality, build-binaries]
+    env:
+      COMPOSE_PROJECT_NAME: nexus-platform-engine-ci
+      SEARCH_GRPC_PORT: 15052
+      ELASTICSEARCH_PORT: 19200
+      REDIS_PORT: 16379
+      SEARCH_INTEGRATION_ADDR: localhost:15052
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start Elasticsearch and Redis
+        run: docker compose up -d --wait elasticsearch redis
+      - name: Seed deterministic Search fixture
+        run: |
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors \
+            'http://localhost:19200/_cluster/health?wait_for_status=yellow&timeout=5s'
+          curl --fail --silent --show-error -X PUT \
+            'http://localhost:19200/nexus_estate_properties' \
+            -H 'Content-Type: application/json' \
+            -d '{"mappings":{"properties":{"publishedAt":{"type":"date"}}}}'
+          curl --fail --silent --show-error -X PUT \
+            'http://localhost:19200/nexus_estate_properties/_doc/foundation-1?refresh=true' \
+            -H 'Content-Type: application/json' \
+            -d '{"id":"foundation-1","title":"foundationfixture","publishedAt":"2026-01-01"}'
+          curl --fail --silent --show-error -X PUT \
+            'http://localhost:19200/nexus_estate_properties/_doc/foundation-fallback?refresh=true' \
+            -H 'Content-Type: application/json' \
+            -d '{"id":"foundation-fallback","title":"foundationfallback","publishedAt":"2026-01-02"}'
+      - name: Start Search
+        run: docker compose up -d --build search
+      - name: Exercise Search with Redis
+        run: |
+          go test -v -count=1 ./test/integration 2>&1 | tee /tmp/search-integration-redis.log
+          if grep -q -- 'SKIP: TestSearchRuntime' /tmp/search-integration-redis.log; then
+            echo 'Search integration was skipped'
+            exit 1
+          fi
+          if docker compose logs search 2>&1 | grep -q -- 'redis unavailable'; then
+            echo 'Search did not connect to Redis during the normal-path test'
+            exit 1
+          fi
+          test "$(docker compose exec -T redis redis-cli --scan --pattern 'nexus-estate:search:properties:*' | wc -l)" -ge 1
+      - name: Exercise Search without Redis
+        run: |
+          docker compose stop redis
+          SEARCH_INTEGRATION_KEYWORD=foundationfallback SEARCH_INTEGRATION_EXPECTED_ID=foundation-fallback \
+            go test -v -count=1 -run '^TestSearchRuntime$' ./test/integration 2>&1 | tee /tmp/search-integration-no-redis.log
+          if grep -q -- 'SKIP: TestSearchRuntime' /tmp/search-integration-no-redis.log; then
+            echo 'Search integration was skipped'
+            exit 1
+          fi
+      - name: Verify Elasticsearch controls readiness without restarting Search
+        run: |
+          docker compose stop elasticsearch
+          SEARCH_EXPECT_NOT_SERVING=1 go test -v -count=1 -run '^TestSearchReadinessDropsWhenElasticsearchStops$' ./test/integration
+          test "$(docker compose ps --status running --services | grep -x search | wc -l)" -eq 1
+      - name: Dump Search logs on failure
+        if: failure()
+        run: docker compose logs search
+      - name: Tear down integration stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  smoke-engine:
+    name: Engine health smoke
+    runs-on: ubuntu-latest
+    needs: [quality, build-binaries]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start Engine
+        run: |
+          go build -o /tmp/nexus-engine ./cmd/engine
+          /tmp/nexus-engine >/tmp/nexus-engine.log 2>&1 &
+          engine_pid=$!
+          trap 'kill -TERM "$engine_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if ENGINE_SMOKE_ADDR=localhost:50051 go test -v -run '^TestEngineHealth$' ./test/integration; then
+              kill -TERM "$engine_pid"
+              wait "$engine_pid"
+              trap - EXIT
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/nexus-engine.log
+          exit 1
+
+  smoke-worker:
+    name: Worker lifecycle smoke
+    runs-on: ubuntu-latest
+    needs: [quality, build-binaries]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start and stop Worker
+        run: |
+          go build -o /tmp/nexus-worker ./cmd/worker
+          /tmp/nexus-worker >/tmp/nexus-worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill -TERM "$worker_pid" 2>/dev/null || true' EXIT
+          sleep 3
+          kill -0 "$worker_pid"
+          kill -TERM "$worker_pid"
+          wait "$worker_pid"
+          trap - EXIT
+
+  docker-search:
+    name: Docker Search
+    runs-on: ubuntu-latest
+    needs: [quality, build-binaries, integration-search]
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        runtime: [search, engine, worker]
     steps:
       - uses: actions/checkout@v7
       - name: Go version from module
@@ -86,7 +202,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/nexus-estate/nexus-${{ matrix.runtime }}
+          images: ghcr.io/nexus-estate/nexus-search
           flavor: latest=false
           tags: |
             type=raw,value=${{ github.sha }}
@@ -96,10 +212,90 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          target: ${{ matrix.runtime }}
+          target: search
           build-args: GO_VERSION=${{ steps.go.outputs.version }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.runtime }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.runtime }}
+          cache-from: type=gha,scope=search
+          cache-to: type=gha,mode=max,scope=search
+
+  docker-engine:
+    name: Docker Engine
+    runs-on: ubuntu-latest
+    needs: [quality, build-binaries, smoke-engine]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Go version from module
+        id: go
+        run: echo "version=$(awk '/^go / {print $2}' go.mod)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/nexus-estate/nexus-engine
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=develop-latest,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: engine
+          build-args: GO_VERSION=${{ steps.go.outputs.version }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=engine
+          cache-to: type=gha,mode=max,scope=engine
+
+  docker-worker:
+    name: Docker Worker
+    runs-on: ubuntu-latest
+    needs: [quality, build-binaries, smoke-worker]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Go version from module
+        id: go
+        run: echo "version=$(awk '/^go / {print $2}' go.mod)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/nexus-estate/nexus-worker
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=develop-latest,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          build-args: GO_VERSION=${{ steps.go.outputs.version }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker

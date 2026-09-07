@@ -50,12 +50,14 @@ func load(v *viper.Viper, runtime string) (*Config, error) {
 	}
 	v.SetDefault("APP_ENV", "development")
 	prefix := strings.ToUpper(runtime)
-	port := "50052"
-	if runtime == "engine" {
-		port = "50051"
+	if runtime != "worker" {
+		port := "50052"
+		if runtime == "engine" {
+			port = "50051"
+		}
+		v.SetDefault(prefix+"_GRPC_PORT", port)
 	}
 	v.SetDefault(prefix+"_SERVICE_NAME", "nexus-"+runtime)
-	v.SetDefault(prefix+"_GRPC_PORT", port)
 	v.SetDefault(prefix+"_GRPC_REFLECTION_ENABLED", v.GetString("APP_ENV") != "production")
 	if runtime == "search" {
 		for key, legacy := range map[string]string{"SEARCH_SERVICE_NAME": "APP_NAME", "SEARCH_GRPC_PORT": "GRPC_PORT", "SEARCH_GRPC_REFLECTION_ENABLED": "GRPC_REFLECTION_ENABLED"} {

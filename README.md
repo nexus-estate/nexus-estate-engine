@@ -8,8 +8,8 @@ without creating a repository or microservice for every domain.
 | Binary | Entry point | Port | Status |
 | --- | --- | --- | --- |
 | nexus-search | `cmd/search` | gRPC 50052 | Existing property search; deployment priority |
-| nexus-engine | `cmd/engine` | gRPC 50051 | Health-only skeleton; deploy later |
-| nexus-worker | `cmd/worker` | None | Signal-aware skeleton; deploy when work exists |
+| nexus-engine | `cmd/engine` | gRPC 50051 | Health-only foundation; deployable now |
+| nexus-worker | `cmd/worker` | None | Signal-aware foundation; deployable now |
 
 ## Run Search locally
 
@@ -74,10 +74,12 @@ Do not keep a stale `GO_VERSION` override in `.env`.
 
 Unit tests cover query/filter construction, pagination, deterministic cache keys,
 cache hit/miss/error behavior, gRPC field mapping, config compatibility, dependency
-health and forced shutdown. Required CI runs unit/race checks, binary builds and
-all three Docker builds. Real Elasticsearch and Redis fallback smoke tests are
-manual/local and remain opt-in via `SEARCH_INTEGRATION_ADDR`, as documented in
-[deploy/README.md](deploy/README.md).
+health and forced shutdown. Required CI runs unit/race checks, binary builds, the
+real Search integration gate and all three Docker builds. The integration gate is
+isolated and deterministic; it seeds Search fixtures, verifies the Search RPC with
+Redis, repeats it after Redis is stopped, and checks dependency-driven readiness
+without restarting the process. Local smoke tests remain opt-in via
+`SEARCH_INTEGRATION_ADDR`, as documented in [deploy/README.md](deploy/README.md).
 
 ## Protobuf
 
@@ -120,7 +122,13 @@ make docker-worker
 
 Each Docker target runs as non-root with CA certificates and timezone data.
 Search remains the default Docker target. CI builds all three images on PRs
-without pushing; successful main/develop/tag pushes publish:
+without pushing. The `integration-search` job starts Elasticsearch, Redis and
+the real Search runtime, seeds a deterministic fixture, exercises
+`SearchProperties`, stops Redis, exercises the Elasticsearch fallback, and
+checks that Elasticsearch failure changes readiness without restarting Search.
+The job fails if the integration test is skipped. Docker build and publication
+wait for quality, binary builds and this integration gate. Successful
+main/develop/tag pushes publish:
 
 - `ghcr.io/nexus-estate/nexus-search:<full-git-sha>`
 - `ghcr.io/nexus-estate/nexus-engine:<full-git-sha>`
