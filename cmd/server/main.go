@@ -9,12 +9,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	searchv1 "github.com/NexusEstate/nexus-estate-search-service/gen/search/v1"
-	"github.com/NexusEstate/nexus-estate-search-service/internal/config"
-	grpcserver "github.com/NexusEstate/nexus-estate-search-service/internal/grpc"
-	esinfra "github.com/NexusEstate/nexus-estate-search-service/internal/infrastructure/elasticsearch"
-	redisinfra "github.com/NexusEstate/nexus-estate-search-service/internal/infrastructure/redis"
-	"github.com/NexusEstate/nexus-estate-search-service/internal/search"
+	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
+	"github.com/nexus-estate/nexus-estate-platform-engine/internal/config"
+	grpcserver "github.com/nexus-estate/nexus-estate-platform-engine/internal/grpc"
+	esinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/infrastructure/elasticsearch"
+	redisinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/infrastructure/redis"
+	"github.com/nexus-estate/nexus-estate-platform-engine/internal/search"
 )
 
 func main() {

@@ -3,8 +3,8 @@ package grpc
 import (
 	"context"
 
-	searchv1 "github.com/NexusEstate/nexus-estate-search-service/gen/search/v1"
-	"github.com/NexusEstate/nexus-estate-search-service/internal/search"
+	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
+	"github.com/nexus-estate/nexus-estate-platform-engine/internal/search"
 )
 
 type SearchServer struct {

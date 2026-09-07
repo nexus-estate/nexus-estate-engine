@@ -5,7 +5,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/NexusEstate/nexus-estate-search-service/internal/config"
+	"github.com/nexus-estate/nexus-estate-platform-engine/internal/config"
 )
 
 func NewClient(ctx context.Context, cfg config.RedisConfig) (*goredis.Client, error) {

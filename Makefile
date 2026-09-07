@@ -7,9 +7,9 @@ PROFILE ?= develop
 proto:
 	protoc \
 		--go_out=. \
-		--go_opt=module=github.com/NexusEstate/nexus-estate-search-service \
+		--go_opt=module=github.com/nexus-estate/nexus-estate-platform-engine \
 		--go-grpc_out=. \
-		--go-grpc_opt=module=github.com/NexusEstate/nexus-estate-search-service \
+		--go-grpc_opt=module=github.com/nexus-estate/nexus-estate-platform-engine \
 		proto/search/v1/search.proto
 
 .PHONY: tidy
