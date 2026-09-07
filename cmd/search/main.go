@@ -10,10 +10,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/config"
-	grpcserver "github.com/nexus-estate/nexus-estate-platform-engine/internal/grpc"
-	esinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/infrastructure/elasticsearch"
-	redisinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/infrastructure/redis"
+	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
+	esinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/elasticsearch"
+	redisinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/redis"
 	"github.com/nexus-estate/nexus-estate-platform-engine/internal/search"
 )
 
@@ -43,7 +42,7 @@ func main() {
 
 	searchRepo := search.NewElasticsearchRepository(esClient, cfg.Elasticsearch.PropertyIndex)
 	searchService := search.NewService(searchRepo, redisClient, cfg.Redis.SearchTTLSeconds)
-	searchServer := grpcserver.NewSearchServer(searchService)
+	searchServer := search.NewSearchServer(searchService)
 
 	listener, err := net.Listen("tcp", ":"+cfg.App.GRPCPort)
 	if err != nil {
