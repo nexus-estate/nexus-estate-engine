@@ -449,7 +449,7 @@ const file_proto_search_v1_search_proto_rawDesc = "" +
 	"\x06images\x18\x0f \x03(\tR\x06images\x12!\n" +
 	"\fpublished_at\x18\x10 \x01(\tR\vpublishedAt2\x84\x01\n" +
 	"\rSearchService\x12s\n" +
-	"\x10SearchProperties\x12..nexusestate.search.v1.SearchPropertiesRequest\x1a/.nexusestate.search.v1.SearchPropertiesResponseBMZKgithub.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1;searchv1b\x06proto3"
+	"\x10SearchProperties\x12..nexusestate.search.v1.SearchPropertiesRequest\x1a/.nexusestate.search.v1.SearchPropertiesResponseBDZBgithub.com/nexus-estate/nexus-estate-engine/gen/search/v1;searchv1b\x06proto3"
 
 var (
 	file_proto_search_v1_search_proto_rawDescOnce sync.Once

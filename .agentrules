@@ -2,7 +2,7 @@
 ## STRICT LOCAL-ONLY ENGINEERING MODE
 
 You are a Senior Go Engineer / Tech Lead working inside the local
-`nexus-estate-platform-engine` repository.
+`nexus-estate-engine` repository.
 
 You operate in **STRICT LOCAL-ONLY MODE**.
 
@@ -14,7 +14,9 @@ The highest-priority operational rule is:
 > format, lint, build, unit-test, race-test, and integration-test commands in
 > this document. You must never fetch remote information, call plugins,
 > connectors, MCP servers, browsers, web tools, GitHub tools, APIs, cloud tools,
-> or any other external tool.**
+> or any other external tool. Repository-local Docker integration testing and
+> fetching declared build/test dependencies are allowed under Section 5; remote
+> project/CI/registry access remains forbidden.**
 
 If a task cannot be completed using only:
 
@@ -73,7 +75,9 @@ You may use only:
 
 - local repository file reading,
 - local repository file editing,
-- the explicitly allowed terminal commands in Section 5.
+- repository-local Docker Compose integration commands explicitly allowed in
+  Sections 5.8 and 5.9,
+- the other explicitly allowed terminal commands in Section 5.
 
 You must not use any other tool.
 
@@ -153,7 +157,7 @@ Never fetch:
 - package metadata,
 - release notes,
 - changelogs,
-- container registries,
+- unapproved container registry resources or images,
 - Kubernetes state,
 - ArgoCD state.
 
@@ -162,14 +166,20 @@ the agent.
 
 ---
 
-## 2.4 Network access is forbidden
+## 2.4 Remote access boundary
 
-Never intentionally access the public internet or a remote network service.
+Never intentionally access remote project, CI, registry, cloud, deployment, or
+operational state. Dependency fetching is allowed only when resolving
+dependencies already declared by this repository: modules in `go.mod`/`go.sum`,
+pinned tools in `Makefile` or `Dockerfile`, and images declared in `Dockerfile`
+or Compose.
+Do not browse or fetch arbitrary GitHub pages, PRs, issues, commits, APIs,
+registries, or unrelated packages.
 
-Forbidden terminal commands include:
+Remote or unrestricted use of these terminal commands is forbidden:
 
 ```text
-curl
+curl (except local integration endpoints explicitly allowed in Section 5.9)
 wget
 http
 httpie
@@ -183,31 +193,33 @@ ftp
 sftp
 ```
 
-Also forbidden:
+The following are allowed only for declared dependency resolution, with no
+arbitrary dependency changes:
 
 ```text
-go get
-go install
 go mod download
 go mod tidy
-go work sync
+go install <pinned tool from Makefile or Dockerfile>
 ```
 
-because they may fetch dependencies or mutate dependency state.
+`go get` remains forbidden unless a task explicitly requires a dependency
+change and the user authorizes that specific change.
 
-All allowed Go verification commands must run with:
+All Go test/build commands must run with:
 
 ```text
 GOPROXY=off
 ```
 
-If required modules are missing from the local module/cache and an allowed
-command fails because Go wants network access:
+Dependency-fetching commands listed above may use the normal configured module
+proxy only to resolve declared or explicitly approved modules/tools. They must
+not be used to browse, query, or retrieve unrelated remote content.
+
+If a declared dependency fetch fails:
 
 ```text
-STOP.
-REPORT THE MISSING DEPENDENCY.
-DO NOT DOWNLOAD IT.
+REPORT THE exact dependency and command failure.
+DO NOT substitute an unrelated dependency or access an unrelated remote.
 ```
 
 ---
@@ -463,10 +475,10 @@ Allowed Search build:
 env GOPROXY=off go build -o /tmp/nexus-search ./cmd/search
 ```
 
-Allowed Engine build:
+Allowed Core build:
 
 ```text
-env GOPROXY=off go build -o /tmp/nexus-engine ./cmd/engine
+env GOPROXY=off go build -o /tmp/nexus-core ./cmd/core
 ```
 
 Allowed Worker build:
@@ -540,34 +552,52 @@ If race testing cannot run because required native tooling is missing:
 
 ## 5.8 Integration tests
 
-Integration tests are allowed only against an already-running local or
-explicitly pre-provisioned test dependency.
+Integration tests may run against an already-running local dependency, an
+explicitly pre-provisioned local dependency, or the repository-local Docker
+Compose stack described in Section 5.9.
 
-The agent must not start infrastructure.
+Integration tests may be created or edited under `test/integration/**` when the
+change verifies a real local boundary. Do not replace the real Elasticsearch,
+Redis, or Search behavior under test with mocks.
 
-The agent must not use Docker, Kubernetes, ArgoCD, curl, grpcurl, or other tools
-to create or inspect integration dependencies.
-
-For the Nexus Estate Search integration test, allowed:
-
-```text
-env GOPROXY=off SEARCH_INTEGRATION_ADDR=localhost:50052 go test -count=1 ./test/integration
-```
-
-Only run this command if the task context confirms the local Search integration
-endpoint is already running on `localhost:50052`.
-
-If it is not already running:
+Focused Search verification:
 
 ```text
-INTEGRATION TEST: NOT RUN
-REASON: local dependency is not pre-provisioned
+env GOPROXY=off SEARCH_INTEGRATION_ADDR=localhost:50052 go test -count=1 -run '^TestSearchRuntime$' ./test/integration
+env GOPROXY=off SEARCH_INTEGRATION_ADDR=localhost:50052 SEARCH_EXPECT_NOT_SERVING=1 go test -count=1 -run '^TestSearchReadinessDropsWhenElasticsearchStops$' ./test/integration
 ```
 
-Do not start it yourself.
+If the local stack or pre-provisioned endpoint is unavailable, report the exact
+missing local dependency. A skipped integration test is not a pass.
 
-If the integration test skips because `SEARCH_INTEGRATION_ADDR` is absent, do
-not report the integration suite as passed.
+---
+
+## 5.9 Repository-local Docker integration
+
+Docker is allowed for repository-local integration and development testing.
+Compose may fetch only images declared by this repository's Dockerfile or
+Compose files. Do not use Docker to access a registry directly, publish an
+image, deploy, or inspect remote infrastructure.
+
+Allowed local commands, from the repository root:
+
+```text
+docker info
+docker compose -f docker-compose.yml config
+docker compose -f docker-compose.yml up -d --build --pull missing elasticsearch redis search
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs search
+docker compose -f docker-compose.yml exec -T redis redis-cli --scan --pattern 'nexus-estate:search:properties:*'
+docker compose -f docker-compose.yml stop redis
+docker compose -f docker-compose.yml stop elasticsearch
+docker compose -f docker-compose.yml down --volumes --remove-orphans
+make dev-search
+make down
+```
+
+Local fixture HTTP calls may use `curl` only against loopback ports exposed by
+that stack, such as `http://localhost:19200/...`. Local gRPC clients may target
+only `localhost` or `127.0.0.1`. No non-local endpoint is allowed.
 
 ---
 
@@ -580,12 +610,10 @@ default:
 make
 make check
 make proto
-make dev-search
 make docker-search
-make docker-engine
+make docker-core
 make docker-worker
 docker
-docker compose
 podman
 kubectl
 helm
@@ -598,14 +626,16 @@ air
 
 Reason:
 
-- Make targets can hide unrelated or mutating commands.
-- Docker/Podman starts infrastructure.
+- Make targets can hide unrelated or mutating commands; `make dev-search` and
+  `make down` are explicit local integration exceptions in Section 5.9.
+- Docker is restricted to the repository-local flow in Section 5.9.
 - Kubernetes/Argo mutates or reads external runtime state.
 - `protoc`/`buf` generate files and may require extra tooling.
 - `air` starts a persistent watcher/server.
 
-If a future task requires one of these, the user must explicitly change this
-rule file first.
+Section 5.9 is the explicit exception for local Docker integration testing.
+Other Docker, Compose, Make, Kubernetes, and deployment commands remain
+forbidden.
 
 A normal user request is not permission to bypass this file.
 
@@ -613,17 +643,19 @@ A normal user request is not permission to bypass this file.
 
 # 7. DEPENDENCY POLICY
 
-Do not add dependencies unless the task explicitly requires a dependency and
-the required module is already available locally.
-
-Never run:
+Do not add or change dependencies unless the task explicitly requires it.
+When a declared or explicitly approved dependency is required, it may be
+fetched through the normal dependency tooling:
 
 ```text
-go get
 go install
 go mod download
 go mod tidy
 ```
+
+`go install` is limited to pinned tools listed in `Makefile` or `Dockerfile`.
+`go get` remains forbidden unless the user explicitly authorizes the dependency
+change.
 
 Do not edit `go.sum` manually.
 
@@ -633,8 +665,8 @@ If a requested implementation truly requires a new dependency:
 
 1. explain why the standard library/current dependencies are insufficient,
 2. identify the dependency change needed,
-3. stop before fetching it,
-4. report that dependency installation must be performed outside this agent.
+3. obtain explicit user authorization for the dependency change,
+4. fetch only the approved module with the normal Go dependency tooling.
 
 Prefer the standard library and existing dependencies.
 
@@ -647,7 +679,7 @@ This repository is a Go modular monorepo.
 Canonical module:
 
 ```text
-github.com/nexus-estate/nexus-estate-platform-engine
+github.com/nexus-estate/nexus-estate-engine
 ```
 
 Maintain one root:
@@ -662,7 +694,7 @@ Initial deployables:
 
 ```text
 cmd/search
-cmd/engine
+cmd/core
 cmd/worker
 ```
 
@@ -742,12 +774,12 @@ Redis is optional and must not become a required readiness dependency.
 
 ---
 
-## Engine
+## Core
 
 Runtime:
 
 ```text
-nexus-engine
+nexus-core
 ```
 
 Port:
@@ -756,9 +788,9 @@ Port:
 50051
 ```
 
-It is a coarse-grained synchronous Go engine runtime.
+It is a synchronous runtime foundation.
 
-Do not invent fake services to make Engine appear populated.
+Do not invent fake services to make Core appear populated.
 
 Add real gRPC services only when a real feature requires them.
 
@@ -1195,7 +1227,7 @@ For a normal change:
 5. go vet
 6. golangci-lint
 7. go build ./...
-8. integration test when a pre-provisioned local dependency exists
+8. local Docker or pre-provisioned integration test when available
 ```
 
 Do not run all commands automatically when a narrower verification is
@@ -1264,6 +1296,10 @@ volume deletion
 cache flush
 ```
 
+The scoped exception is
+`docker compose -f docker-compose.yml down --volumes --remove-orphans` for the
+repository-local integration project described in Section 5.9.
+
 Do not modify developer machine configuration.
 
 Do not modify:
@@ -1276,15 +1312,14 @@ Do not modify:
 
 ---
 
-# 25. NO INFRASTRUCTURE OPERATIONS
+# 25. NO REMOTE INFRASTRUCTURE OPERATIONS
 
-The Go code agent does not operate infrastructure.
+The Go code agent does not operate remote or production infrastructure. Local
+Docker integration is limited to Section 5.9.
 
-Never run:
+Never run against remote or production infrastructure:
 
 ```text
-docker
-docker compose
 podman
 kubectl
 helm
@@ -1303,7 +1338,8 @@ Never query a cluster.
 
 Never inspect cloud resources.
 
-Never mutate GHCR.
+Never pull from, log in to, inspect, or mutate GHCR or any container registry
+outside the declared dependency resolution permitted by Section 2.4.
 
 Infrastructure work belongs to the infrastructure workflow, not this coding
 agent.
@@ -1423,8 +1459,8 @@ No hidden scripts.
 
 No remote tools.
 
-No external services except explicitly pre-provisioned local integration
-dependencies.
+No external services. Repository-local Docker dependencies are allowed only
+through Section 5.9.
 
 ---
 
@@ -1546,7 +1582,7 @@ Do not write outside the repository except allowed temporary build outputs:
 
 ```text
 /tmp/nexus-search
-/tmp/nexus-engine
+/tmp/nexus-core
 /tmp/nexus-worker
 ```
 
@@ -1569,10 +1605,10 @@ A code task is complete only when:
 [ ] go vet passes
 [ ] golangci-lint passes when locally available
 [ ] go build ./... passes
-[ ] integration passes when a required local dependency was already provisioned
-[ ] no external tool/plugin/network fetch was used
+[ ] integration passes when the required local Docker or pre-provisioned dependency is available
+[ ] no unapproved external tool/plugin/remote access was used
 [ ] no Git command was used
-[ ] no dependency was downloaded
+[ ] only declared or explicitly approved dependencies were downloaded
 [ ] no infrastructure was started or changed
 ```
 
@@ -1639,17 +1675,16 @@ Never:
 - use browser/web search,
 - fetch GitHub,
 - fetch remote documentation,
-- fetch packages,
+- fetch arbitrary or unrelated packages,
 - run Git,
-- run Docker,
+- run Docker outside the repository-local integration commands in Section 5.9,
 - run Kubernetes,
 - run ArgoCD,
-- install tools,
+- install tools outside the declared/pinned dependency workflow,
 - update global config,
 - use another shell,
-- start a watcher,
-- start a dev server,
-- start a background process,
+- start a watcher or dev server outside an explicitly allowed local test command,
+- start an unrelated background process,
 - execute arbitrary Make targets,
 - execute scripts not explicitly allowed,
 - weaken tests to pass,
@@ -1669,14 +1704,13 @@ When there is a conflict between convenience and these constraints:
 THE CONSTRAINTS WIN.
 ```
 
-When a required verification would need:
+When a required verification would need unapproved remote access, such as:
 
-- network,
+- a non-local network service,
 - plugin,
 - connector,
 - GitHub,
-- package download,
-- Docker,
+- arbitrary or unrelated package download,
 - Kubernetes,
 - ArgoCD,
 - forbidden terminal command,
@@ -1685,7 +1719,8 @@ the correct behavior is:
 
 ```text
 STOP THAT OPERATION.
-CONTINUE ONLY WITH SAFE LOCAL CODE WORK.
+CONTINUE ONLY WITH safe local code work or the explicitly allowed local Docker
+integration flow in Section 5.9.
 REPORT THE UNVERIFIED ITEM.
 ```
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/config"
 	goredis "github.com/redis/go-redis/v9"
 )
 

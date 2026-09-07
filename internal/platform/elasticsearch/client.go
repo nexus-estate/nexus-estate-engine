@@ -6,7 +6,7 @@ import (
 	es "github.com/elastic/go-elasticsearch/v8"
 	"net/http"
 
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/config"
 )
 
 func NewClient(cfg config.ElasticsearchConfig) (*es.Client, func(), error) {

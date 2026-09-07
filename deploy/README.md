@@ -1,16 +1,26 @@
 # Deployment boundary and local smoke test
 
-CI publishes `ghcr.io/nexus-estate/nexus-{search,engine,worker}:<full-git-sha>`.
+CI publishes `ghcr.io/nexus-estate/nexus-{search,core,worker}:<full-git-sha>`.
 The GitOps repository selects the immutable image and performs rollout. This
 repository has no Kubernetes manifests or cluster mutation commands. Keep the
 Search gRPC contract and port 50052 stable during the runtime transition. The
 infra repository provides the canonical `nexus-search` Service and temporary
 legacy aliases. Retain the old image/tag; rollback changes only the infra image
 reference or Service selector.
-Engine and worker are deployable lifecycle foundations now. They expose no
-fake business modules: Engine provides only standard gRPC health, while Worker
+Core and worker are deployable lifecycle foundations now. They expose no
+fake business modules: Core provides only standard gRPC health, while Worker
 starts, stays idle without a busy loop, and shuts down on signal. Their infra
 manifests initialize them with one replica in staging and production.
+
+Compose has two modes:
+
+- `docker-compose.yml` is the production-like base used by CI. Search runs the
+  built `/app/nexus-search` binary directly.
+- `docker-compose.dev.yml` is a local-only override for `make dev-search`. It
+  enables Air, bind-mounts source, and provides Go caches for hot reload.
+
+CI must use the base Compose file only so Search integration exercises the same
+production Search artifact shape as the published image.
 
 CI runs the same disposable Compose flow as a required `integration-search`
 gate. It fails when the integration test is skipped and runs the Search RPC

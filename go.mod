@@ -1,4 +1,4 @@
-module github.com/nexus-estate/nexus-estate-platform-engine
+module github.com/nexus-estate/nexus-estate-engine
 
 go 1.25.0
 

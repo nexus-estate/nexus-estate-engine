@@ -1,10 +1,10 @@
-name: nexus-estate-platform
+name: nexus-estate-engine
 
 services:
   search:
     build:
       context: .
-      target: development
+      target: search
       args:
         GO_VERSION: ${GO_VERSION:-1.25.0}
     image: nexus-search:local
@@ -23,29 +23,26 @@ services:
       REDIS_SEARCH_TTL_SECONDS: ${REDIS_SEARCH_TTL_SECONDS:-60}
     ports:
       - "${SEARCH_GRPC_PORT:-50052}:50052"
-    volumes:
-      - .:/app
-      - go_mod_cache:/go/pkg/mod
-      - go_build_cache:/root/.cache/go-build
     depends_on:
       elasticsearch:
         condition: service_healthy
     stop_grace_period: 15s
 
-  engine:
+  core:
     profiles: [platform]
     build:
       context: .
-      target: engine
+      target: core
       args:
         GO_VERSION: ${GO_VERSION:-1.25.0}
-    image: nexus-engine:local
+    image: nexus-core:local
     environment:
       APP_ENV: development
-      ENGINE_GRPC_PORT: "50051"
-      ENGINE_GRPC_REFLECTION_ENABLED: "true"
+      CORE_SERVICE_NAME: nexus-core
+      CORE_GRPC_PORT: "50051"
+      CORE_GRPC_REFLECTION_ENABLED: "true"
     ports:
-      - "${ENGINE_GRPC_PORT:-50051}:50051"
+      - "${CORE_GRPC_PORT:-50051}:50051"
     stop_grace_period: 15s
 
   worker:
@@ -93,5 +90,3 @@ services:
 volumes:
   nexus_estate_es_data:
   nexus_estate_redis_data:
-  go_mod_cache:
-  go_build_cache:

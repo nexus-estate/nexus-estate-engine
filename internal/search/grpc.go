@@ -3,7 +3,7 @@ package search
 import (
 	"context"
 
-	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
+	searchv1 "github.com/nexus-estate/nexus-estate-engine/gen/search/v1"
 )
 
 type SearchServer struct {

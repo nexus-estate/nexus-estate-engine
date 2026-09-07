@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/app"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/shutdown"
 	"log"
+
+	"github.com/nexus-estate/nexus-estate-engine/internal/app"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/shutdown"
 )
 
 func main() {

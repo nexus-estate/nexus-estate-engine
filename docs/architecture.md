@@ -1,4 +1,4 @@
-# Platform engine architecture
+# Nexus Estate Engine architecture
 
 The source is one Go module with three runtime composition roots. A domain module
 is a code boundary, not an automatic process or repository boundary.
@@ -6,7 +6,7 @@ is a code boundary, not an automatic process or repository boundary.
 ```text
 cmd/search → app.RunSearch → internal/search
                            → platform clients + gRPC lifecycle
-cmd/engine → app.RunEngine → platform gRPC health + lifecycle
+cmd/core   → app.RunCore   → platform gRPC health + lifecycle
 cmd/worker → app.RunWorker → config + logger + context cancellation
 ```
 
@@ -20,10 +20,11 @@ The Search contract and data remain compatible. Pagination defaults to page 1 an
 key format are preserved. There are no data/index migrations in foundation.
 Legacy Search environment variables remain fallbacks during the image transition.
 
-Search and engine expose standard gRPC Health. Search's empty service and
+Search and core expose standard gRPC Health. Search's empty service and
 `nexusestate.search.v1.SearchService` readiness statuses follow an Elasticsearch
 probe every five seconds, with a two-second timeout. No Redis check gates health.
-Engine is ready after bootstrap because it has no domain dependencies yet.
+Core is ready after bootstrap because it has no domain dependencies yet. Core
+uses only `CORE_*` configuration and does not initialize Search infrastructure.
 
 SIGTERM/SIGINT cancel the root context. Readiness monitoring stops, health reports
 NOT_SERVING, and gRPC drains for up to ten seconds before forced Stop. Redis and
@@ -38,6 +39,7 @@ included. Add feature modules under `internal/<domain>` and compose them explici
 when their actual use cases and contracts are ready.
 
 CI owns builds and GHCR publication. The infra repository owns immutable image
-selection and ArgoCD rollout. Initially roll out Search only; retain old images
-and the temporary legacy Service aliases, and revert the infra image reference if
-staging or production verification fails.
+selection and ArgoCD rollout. Roll out Core, Worker and Search only after their
+runtime-specific quality gates pass; retain old Search images and the temporary
+legacy Service alias until API consumer migration is verified. Revert the exact
+immutable image reference if staging or production verification fails.

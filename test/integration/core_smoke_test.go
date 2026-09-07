@@ -11,10 +11,10 @@ import (
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-func TestEngineHealth(t *testing.T) {
-	address := os.Getenv("ENGINE_SMOKE_ADDR")
+func TestCoreHealth(t *testing.T) {
+	address := os.Getenv("CORE_SMOKE_ADDR")
 	if address == "" {
-		t.Skip("set ENGINE_SMOKE_ADDR to test a running Engine")
+		t.Skip("set CORE_SMOKE_ADDR to test a running Core")
 	}
 
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -30,6 +30,6 @@ func TestEngineHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Status != healthv1.HealthCheckResponse_SERVING {
-		t.Fatalf("engine health=%s", response.Status)
+		t.Fatalf("core health=%s", response.Status)
 	}
 }

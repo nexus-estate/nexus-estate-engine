@@ -6,7 +6,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/config"
 )
 
 // Cache operations must not consume the Search request deadline.

@@ -38,6 +38,8 @@ jobs:
           make proto
           git diff --exit-code -- proto gen
       - run: go mod download
+      - name: Verify canonical module and runtime naming
+        run: test "$(go list -m)" = "github.com/nexus-estate/nexus-estate-engine"
       - name: Formatting
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
@@ -53,6 +55,7 @@ jobs:
 
   build-binaries:
     runs-on: ubuntu-latest
+    needs: quality
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -66,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [quality, build-binaries]
     env:
-      COMPOSE_PROJECT_NAME: nexus-platform-engine-ci
+      COMPOSE_PROJECT_NAME: nexus-estate-engine-ci
       SEARCH_GRPC_PORT: 15052
       ELASTICSEARCH_PORT: 19200
       REDIS_PORT: 16379
@@ -99,7 +102,7 @@ jobs:
         run: docker compose up -d --build search
       - name: Exercise Search with Redis
         run: |
-          go test -v -count=1 ./test/integration 2>&1 | tee /tmp/search-integration-redis.log
+          go test -v -count=1 -run '^TestSearchRuntime$' ./test/integration 2>&1 | tee /tmp/search-integration-redis.log
           if grep -q -- 'SKIP: TestSearchRuntime' /tmp/search-integration-redis.log; then
             echo 'Search integration was skipped'
             exit 1
@@ -123,15 +126,17 @@ jobs:
           docker compose stop elasticsearch
           SEARCH_EXPECT_NOT_SERVING=1 go test -v -count=1 -run '^TestSearchReadinessDropsWhenElasticsearchStops$' ./test/integration
           test "$(docker compose ps --status running --services | grep -x search | wc -l)" -eq 1
-      - name: Dump Search logs on failure
+      - name: Dump Search diagnostics on failure
         if: failure()
-        run: docker compose logs search
+        run: |
+          docker compose ps || true
+          docker compose logs search || true
       - name: Tear down integration stack
         if: always()
         run: docker compose down --volumes --remove-orphans
 
-  smoke-engine:
-    name: Engine health smoke
+  smoke-core:
+    name: Core health smoke
     runs-on: ubuntu-latest
     needs: [quality, build-binaries]
     steps:
@@ -140,22 +145,26 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Start Engine
+      - name: Start Core
         run: |
-          go build -o /tmp/nexus-engine ./cmd/engine
-          /tmp/nexus-engine >/tmp/nexus-engine.log 2>&1 &
-          engine_pid=$!
-          trap 'kill -TERM "$engine_pid" 2>/dev/null || true' EXIT
+          go build -o /tmp/nexus-core ./cmd/core
+          /tmp/nexus-core >/tmp/nexus-core.log 2>&1 &
+          core_pid=$!
+          trap 'kill -TERM "$core_pid" 2>/dev/null || true; wait "$core_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
-            if ENGINE_SMOKE_ADDR=localhost:50051 go test -v -run '^TestEngineHealth$' ./test/integration; then
-              kill -TERM "$engine_pid"
-              wait "$engine_pid"
+            if CORE_SMOKE_ADDR=localhost:50051 go test -v -run '^TestCoreHealth$' ./test/integration; then
+              kill -TERM "$core_pid"
+              if ! timeout 15s tail --pid="$core_pid" -f /dev/null; then
+                cat /tmp/nexus-core.log
+                exit 1
+              fi
+              wait "$core_pid"
               trap - EXIT
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/nexus-engine.log
+          cat /tmp/nexus-core.log
           exit 1
 
   smoke-worker:
@@ -176,7 +185,12 @@ jobs:
           trap 'kill -TERM "$worker_pid" 2>/dev/null || true' EXIT
           sleep 3
           kill -0 "$worker_pid"
+          grep -q -- 'worker bootstrap started' /tmp/nexus-worker.log
           kill -TERM "$worker_pid"
+          if ! timeout 15s tail --pid="$worker_pid" -f /dev/null; then
+            cat /tmp/nexus-worker.log
+            exit 1
+          fi
           wait "$worker_pid"
           trap - EXIT
 
@@ -220,10 +234,10 @@ jobs:
           cache-from: type=gha,scope=search
           cache-to: type=gha,mode=max,scope=search
 
-  docker-engine:
-    name: Docker Engine
+  docker-core:
+    name: Docker Core
     runs-on: ubuntu-latest
-    needs: [quality, build-binaries, smoke-engine]
+    needs: [quality, build-binaries, smoke-core]
     permissions:
       contents: read
       packages: write
@@ -242,7 +256,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/nexus-estate/nexus-engine
+          images: ghcr.io/nexus-estate/nexus-core
           flavor: latest=false
           tags: |
             type=raw,value=${{ github.sha }}
@@ -252,13 +266,13 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          target: engine
+          target: core
           build-args: GO_VERSION=${{ steps.go.outputs.version }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=engine
-          cache-to: type=gha,mode=max,scope=engine
+          cache-from: type=gha,scope=core
+          cache-to: type=gha,mode=max,scope=core
 
   docker-worker:
     name: Docker Worker

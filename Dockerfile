@@ -20,9 +20,9 @@ CMD ["air", "-c", ".air.toml"]
 FROM deps AS build-search
 COPY . .
 RUN go build -trimpath -ldflags="-s -w" -o /out/nexus-search ./cmd/search
-FROM deps AS build-engine
+FROM deps AS build-core
 COPY . .
-RUN go build -trimpath -ldflags="-s -w" -o /out/nexus-engine ./cmd/engine
+RUN go build -trimpath -ldflags="-s -w" -o /out/nexus-core ./cmd/core
 FROM deps AS build-worker
 COPY . .
 RUN go build -trimpath -ldflags="-s -w" -o /out/nexus-worker ./cmd/worker
@@ -32,10 +32,10 @@ RUN apk add --no-cache ca-certificates tzdata && addgroup -S app && adduser -S -
 WORKDIR /app
 USER app
 
-FROM runtime-base AS engine
-COPY --from=build-engine /out/nexus-engine /app/nexus-engine
+FROM runtime-base AS core
+COPY --from=build-core /out/nexus-core /app/nexus-core
 EXPOSE 50051
-ENTRYPOINT ["/app/nexus-engine"]
+ENTRYPOINT ["/app/nexus-core"]
 
 FROM runtime-base AS worker
 COPY --from=build-worker /out/nexus-worker /app/nexus-worker

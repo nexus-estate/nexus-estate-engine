@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# The managed workspace may expose a read-only default Go cache. Keep the
+# hook reproducible without changing a developer's global Go configuration.
+export GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/nexus-estate-engine-go-build}"
+
+echo "[pre-commit] checking Go formatting"
+test -z "$(gofmt -l .)"
+
+echo "[pre-commit] running go vet"
+go vet ./...
+
+if command -v golangci-lint >/dev/null 2>&1; then
+  echo "[pre-commit] running golangci-lint"
+  golangci-lint run
+else
+  echo "[pre-commit] golangci-lint not installed; CI will enforce it"
+fi
+
+echo "[pre-commit] running tests"
+go test ./...
+
+echo "[pre-commit] building canonical runtimes"
+go build ./cmd/search ./cmd/core ./cmd/worker

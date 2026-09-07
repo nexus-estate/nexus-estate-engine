@@ -15,5 +15,5 @@ func main() {
 func run() error {
 	ctx, stop := shutdown.SignalContext()
 	defer stop()
-	return app.RunWorker(ctx)
+	return app.RunCore(ctx)
 }

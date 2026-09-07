@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
+	searchv1 "github.com/nexus-estate/nexus-estate-engine/gen/search/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"

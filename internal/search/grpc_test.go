@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
+	searchv1 "github.com/nexus-estate/nexus-estate-engine/gen/search/v1"
 )
 
 func TestGRPCMappingPreservesOptionalZeroAndResponse(t *testing.T) {

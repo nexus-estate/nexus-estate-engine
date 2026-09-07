@@ -1,4 +1,4 @@
-# Nexus Estate Platform Engine
+# Nexus Estate Engine
 
 Go modular monorepo for Nexus Estate: one `go.mod`, bounded modules under
 `internal/`, and a small number of independently deployable binaries. Keeping
@@ -8,7 +8,7 @@ without creating a repository or microservice for every domain.
 | Binary | Entry point | Port | Status |
 | --- | --- | --- | --- |
 | nexus-search | `cmd/search` | gRPC 50052 | Existing property search; deployment priority |
-| nexus-engine | `cmd/engine` | gRPC 50051 | Health-only foundation; deployable now |
+| nexus-core | `cmd/core` | gRPC 50051 | Health-only synchronous foundation; deployable now |
 | nexus-worker | `cmd/worker` | None | Signal-aware foundation; deployable now |
 
 ## Run Search locally
@@ -21,14 +21,16 @@ docker compose logs -f search
 make down
 ```
 
-This starts Search with Air, Elasticsearch and Redis. It does not create an index
-or migrate existing data. Supply the existing property index for useful searches;
-a missing index returns the existing Elasticsearch error behavior. For an isolated
-fixture, see [the smoke test instructions](deploy/README.md).
+This starts Search with Air, Elasticsearch and Redis through the local-only
+`docker-compose.dev.yml` override. It does not create an index or migrate existing
+data. Supply the existing property index for useful searches; a missing index
+returns the existing Elasticsearch error behavior. For an isolated fixture, see
+[the smoke test instructions](deploy/README.md). CI uses the base Compose file and
+the production-like Search binary without Air.
 
 Default host ports are 50052, 9200 and 6379. If a port is already used, override
 `SEARCH_GRPC_PORT`, `ELASTICSEARCH_PORT` or `REDIS_PORT` when invoking Make.
-Compose always points Search at container dependency addresses. Engine and worker
+Compose always points Search at container dependency addresses. Core and worker
 are available with `docker compose --profile platform up -d --build`.
 
 For host development, use Go 1.25 (minimum version in `go.mod`):
@@ -38,15 +40,17 @@ cp .env.example .env
 docker compose up -d elasticsearch redis
 make run-search
 # Separate terminals, when needed:
-make run-engine
+make run-core
 make run-worker
 ```
 
 Environment variables override `.env`. Search-specific settings take precedence
 over legacy `APP_NAME`, `GRPC_PORT` and `GRPC_REFLECTION_ENABLED` aliases, which
-remain supported for existing deployment configurations. Legacy aliases do not
-configure engine or worker. Reflection defaults off when `APP_ENV=production`;
-explicit settings are respected. Redis is optional: failure to connect at startup
+remain supported for existing Search deployment configurations. Legacy aliases do not
+configure Core or Worker. Core uses `CORE_SERVICE_NAME`, `CORE_GRPC_PORT` and
+`CORE_GRPC_REFLECTION_ENABLED`; reflection defaults off when `APP_ENV=production`;
+explicit settings are respected. Worker uses `WORKER_SERVICE_NAME` only and does
+not open a network listener. Redis is optional: failure to connect at startup
 runs without caching; later read/write errors fall back to Elasticsearch. Each
 cache operation has a 500 ms budget, with retries disabled, so an unavailable
 cache cannot consume the full Search request deadline.
@@ -59,13 +63,27 @@ result-window limits.
 ## Build and verify
 
 ```sh
-make build              # bin/nexus-search, bin/nexus-engine, bin/nexus-worker
+make build              # bin/nexus-search, bin/nexus-core, bin/nexus-worker
 make fmt
 make vet
 make test
 make test-race
 make lint               # requires golangci-lint v2.13.2
 make check              # formatting, vet, lint, race, module tidiness
+```
+
+Install the local pre-commit hook once:
+
+```sh
+make install-hooks
+```
+
+It checks formatting, `go vet`, available `golangci-lint`, all Go tests, and
+builds the Search, Core, and Worker binaries. Docker publishing, dependency
+integration, and runtime smoke tests remain CI checks. Run it manually with:
+
+```sh
+make pre-commit
 ```
 
 CI uses Go from `go.mod`. Make forwards that version to Docker/Compose; update
@@ -116,7 +134,7 @@ See [architecture details](docs/architecture.md).
 
 ```sh
 make docker-search
-make docker-engine
+make docker-core
 make docker-worker
 ```
 
@@ -131,7 +149,7 @@ wait for quality, binary builds and this integration gate. Successful
 main/develop/tag pushes publish:
 
 - `ghcr.io/nexus-estate/nexus-search:<full-git-sha>`
-- `ghcr.io/nexus-estate/nexus-engine:<full-git-sha>`
+- `ghcr.io/nexus-estate/nexus-core:<full-git-sha>`
 - `ghcr.io/nexus-estate/nexus-worker:<full-git-sha>`
 
 Convenience aliases are `develop-latest`, `latest` on main, and the `v*` tag name.

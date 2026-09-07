@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/shutdown"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/shutdown"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"

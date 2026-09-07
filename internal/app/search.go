@@ -6,13 +6,13 @@ import (
 	"net"
 	"time"
 
-	searchv1 "github.com/nexus-estate/nexus-estate-platform-engine/gen/search/v1"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
-	esinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/elasticsearch"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/grpcserver"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/logging"
-	redisinfra "github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/redis"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/search"
+	searchv1 "github.com/nexus-estate/nexus-estate-engine/gen/search/v1"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/config"
+	esinfra "github.com/nexus-estate/nexus-estate-engine/internal/platform/elasticsearch"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/grpcserver"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/logging"
+	redisinfra "github.com/nexus-estate/nexus-estate-engine/internal/platform/redis"
+	"github.com/nexus-estate/nexus-estate-engine/internal/search"
 	"go.uber.org/zap"
 )
 

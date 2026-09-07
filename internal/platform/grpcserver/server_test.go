@@ -19,7 +19,7 @@ func TestReadinessAndCancellation(t *testing.T) {
 		ready func(context.Context) error
 		want  healthv1.HealthCheckResponse_ServingStatus
 	}{
-		{"engine", nil, healthv1.HealthCheckResponse_SERVING},
+		{"core", nil, healthv1.HealthCheckResponse_SERVING},
 		{"search ES reachable", func(context.Context) error { return nil }, healthv1.HealthCheckResponse_SERVING},
 		{"search ES down", func(context.Context) error { return errors.New("unavailable") }, healthv1.HealthCheckResponse_NOT_SERVING},
 	} {

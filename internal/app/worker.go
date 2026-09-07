@@ -2,8 +2,9 @@ package app
 
 import (
 	"context"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
-	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/logging"
+
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/config"
+	"github.com/nexus-estate/nexus-estate-engine/internal/platform/logging"
 )
 
 // RunWorker has no work sources until an event contract is implemented.

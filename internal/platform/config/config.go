@@ -45,20 +45,22 @@ func Load(runtime string) (*Config, error) {
 }
 
 func load(v *viper.Viper, runtime string) (*Config, error) {
-	if runtime != "search" && runtime != "engine" && runtime != "worker" {
+	if runtime != "search" && runtime != "core" && runtime != "worker" {
 		return nil, fmt.Errorf("unknown runtime %q", runtime)
 	}
 	v.SetDefault("APP_ENV", "development")
 	prefix := strings.ToUpper(runtime)
 	if runtime != "worker" {
 		port := "50052"
-		if runtime == "engine" {
+		if runtime == "core" {
 			port = "50051"
 		}
 		v.SetDefault(prefix+"_GRPC_PORT", port)
 	}
 	v.SetDefault(prefix+"_SERVICE_NAME", "nexus-"+runtime)
-	v.SetDefault(prefix+"_GRPC_REFLECTION_ENABLED", v.GetString("APP_ENV") != "production")
+	if runtime != "worker" {
+		v.SetDefault(prefix+"_GRPC_REFLECTION_ENABLED", v.GetString("APP_ENV") != "production")
+	}
 	if runtime == "search" {
 		for key, legacy := range map[string]string{"SEARCH_SERVICE_NAME": "APP_NAME", "SEARCH_GRPC_PORT": "GRPC_PORT", "SEARCH_GRPC_REFLECTION_ENABLED": "GRPC_REFLECTION_ENABLED"} {
 			if !v.InConfig(key) && v.IsSet(legacy) {
@@ -66,15 +68,19 @@ func load(v *viper.Viper, runtime string) (*Config, error) {
 			}
 		}
 	}
-	v.SetDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
-	v.SetDefault("ELASTICSEARCH_PROPERTY_INDEX", "nexus_estate_properties")
-	v.SetDefault("REDIS_ADDR", "localhost:6379")
-	v.SetDefault("REDIS_DB", 0)
-	v.SetDefault("REDIS_SEARCH_TTL_SECONDS", 60)
+	grpcPort := ""
+	reflectionEnabled := false
+	if runtime != "worker" {
+		grpcPort = v.GetString(prefix + "_GRPC_PORT")
+		reflectionEnabled = v.GetBool(prefix + "_GRPC_REFLECTION_ENABLED")
+	}
 	cfg := &Config{
-		App:           AppConfig{Name: v.GetString(prefix + "_SERVICE_NAME"), Env: v.GetString("APP_ENV"), GRPCPort: v.GetString(prefix + "_GRPC_PORT"), GRPCReflectionEnabled: v.GetBool(prefix + "_GRPC_REFLECTION_ENABLED")},
-		Elasticsearch: ElasticsearchConfig{Addresses: strings.Split(v.GetString("ELASTICSEARCH_ADDRESSES"), ","), Username: v.GetString("ELASTICSEARCH_USERNAME"), Password: v.GetString("ELASTICSEARCH_PASSWORD"), PropertyIndex: v.GetString("ELASTICSEARCH_PROPERTY_INDEX")},
-		Redis:         RedisConfig{Addr: v.GetString("REDIS_ADDR"), Password: v.GetString("REDIS_PASSWORD"), DB: v.GetInt("REDIS_DB"), SearchTTLSeconds: v.GetInt("REDIS_SEARCH_TTL_SECONDS")},
+		App: AppConfig{
+			Name:                  v.GetString(prefix + "_SERVICE_NAME"),
+			Env:                   v.GetString("APP_ENV"),
+			GRPCPort:              grpcPort,
+			GRPCReflectionEnabled: reflectionEnabled,
+		},
 	}
 	if runtime != "worker" {
 		n, err := strconv.Atoi(cfg.App.GRPCPort)
@@ -83,6 +89,23 @@ func load(v *viper.Viper, runtime string) (*Config, error) {
 		}
 	}
 	if runtime == "search" {
+		v.SetDefault("ELASTICSEARCH_ADDRESSES", "http://localhost:9200")
+		v.SetDefault("ELASTICSEARCH_PROPERTY_INDEX", "nexus_estate_properties")
+		v.SetDefault("REDIS_ADDR", "localhost:6379")
+		v.SetDefault("REDIS_DB", 0)
+		v.SetDefault("REDIS_SEARCH_TTL_SECONDS", 60)
+		cfg.Elasticsearch = ElasticsearchConfig{
+			Addresses:     strings.Split(v.GetString("ELASTICSEARCH_ADDRESSES"), ","),
+			Username:      v.GetString("ELASTICSEARCH_USERNAME"),
+			Password:      v.GetString("ELASTICSEARCH_PASSWORD"),
+			PropertyIndex: v.GetString("ELASTICSEARCH_PROPERTY_INDEX"),
+		}
+		cfg.Redis = RedisConfig{
+			Addr:             v.GetString("REDIS_ADDR"),
+			Password:         v.GetString("REDIS_PASSWORD"),
+			DB:               v.GetInt("REDIS_DB"),
+			SearchTTLSeconds: v.GetInt("REDIS_SEARCH_TTL_SECONDS"),
+		}
 		for i := range cfg.Elasticsearch.Addresses {
 			cfg.Elasticsearch.Addresses[i] = strings.TrimSpace(cfg.Elasticsearch.Addresses[i])
 		}
