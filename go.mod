@@ -1,4 +1,4 @@
-module github.com/NexusEstate/nexus-estate-search-service
+module github.com/nexus-estate/nexus-estate-engine
 
 go 1.25.0
 

@@ -1,18 +1,17 @@
-package grpc
+package search
 
 import (
 	"context"
 
-	searchv1 "github.com/NexusEstate/nexus-estate-search-service/gen/search/v1"
-	"github.com/NexusEstate/nexus-estate-search-service/internal/search"
+	searchv1 "github.com/nexus-estate/nexus-estate-engine/gen/search/v1"
 )
 
 type SearchServer struct {
 	searchv1.UnimplementedSearchServiceServer
-	service search.Service
+	service Service
 }
 
-func NewSearchServer(service search.Service) *SearchServer {
+func NewSearchServer(service Service) *SearchServer {
 	return &SearchServer{
 		service: service,
 	}
@@ -22,7 +21,7 @@ func (s *SearchServer) SearchProperties(
 	ctx context.Context,
 	req *searchv1.SearchPropertiesRequest,
 ) (*searchv1.SearchPropertiesResponse, error) {
-	domainReq := search.PropertySearchRequest{
+	domainReq := PropertySearchRequest{
 		Keyword:  req.GetKeyword(),
 		City:     req.GetCity(),
 		District: req.GetDistrict(),

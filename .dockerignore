@@ -7,3 +7,9 @@ coverage.out
 *.log
 .DS_Store
 README.local.md
+
+.env.*
+!.env.example
+.idea
+.vscode
+github.com

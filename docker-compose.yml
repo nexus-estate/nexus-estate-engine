@@ -1,204 +1,92 @@
-name: nexus-estate-search
+name: nexus-estate-engine
 
 services:
-  search-service:
+  search:
     build:
       context: .
-      dockerfile: Dockerfile
-      target: ${DOCKER_TARGET:-development}
+      target: search
       args:
-        GO_VERSION: ${GO_VERSION:-1.25}
-        ALPINE_VERSION: ${ALPINE_VERSION:-3.20}
-        AIR_VERSION: ${AIR_VERSION:-v1.61.7}
-        VERSION: ${APP_VERSION:-dev}
-        COMMIT: ${APP_COMMIT:-local}
-        BUILD_DATE: ${BUILD_DATE:-local}
-    image: nexus-estate-search-service:${APP_IMAGE_TAG:-local}
-    container_name: nexus-estate-search-service
-    restart: unless-stopped
+        GO_VERSION: ${GO_VERSION:-1.25.0}
+    image: nexus-search:local
     environment:
-      APP_NAME: ${APP_NAME:-nexus-estate-search-service}
-      APP_ENV: ${APP_ENV:-local}
-
-      GRPC_PORT: ${GRPC_PORT:-50052}
-      GRPC_REFLECTION_ENABLED: ${GRPC_REFLECTION_ENABLED:-true}
-
-      ELASTICSEARCH_ADDRESSES: ${ELASTICSEARCH_ADDRESSES:-http://elasticsearch:9200}
+      APP_ENV: ${APP_ENV:-development}
+      SEARCH_SERVICE_NAME: nexus-search
+      SEARCH_GRPC_PORT: "50052"
+      SEARCH_GRPC_REFLECTION_ENABLED: ${SEARCH_GRPC_REFLECTION_ENABLED:-true}
+      ELASTICSEARCH_ADDRESSES: http://elasticsearch:9200
       ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-}
       ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-}
       ELASTICSEARCH_PROPERTY_INDEX: ${ELASTICSEARCH_PROPERTY_INDEX:-nexus_estate_properties}
-
-      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: ${REDIS_DB:-0}
       REDIS_SEARCH_TTL_SECONDS: ${REDIS_SEARCH_TTL_SECONDS:-60}
-
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
-      - "${GRPC_PORT:-50052}:50052"
-    volumes:
-      - .:/app
-      - go_mod_cache:/go/pkg/mod
-      - go_build_cache:/root/.cache/go-build
+      - "${SEARCH_GRPC_PORT:-50052}:50052"
     depends_on:
       elasticsearch:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - nexus-estate-network
-    profiles:
-      - develop
+    stop_grace_period: 15s
 
-  search-service-release:
+  core:
+    profiles: [platform]
     build:
       context: .
-      dockerfile: Dockerfile
-      target: release
+      target: core
       args:
-        GO_VERSION: ${GO_VERSION:-1.23}
-        ALPINE_VERSION: ${ALPINE_VERSION:-3.20}
-        VERSION: ${APP_VERSION:-release}
-        COMMIT: ${APP_COMMIT:-local}
-        BUILD_DATE: ${BUILD_DATE:-local}
-    image: nexus-estate-search-service:${APP_IMAGE_TAG:-release}
-    container_name: nexus-estate-search-service-release
-    restart: unless-stopped
+        GO_VERSION: ${GO_VERSION:-1.25.0}
+    image: nexus-core:local
     environment:
-      APP_NAME: ${APP_NAME:-nexus-estate-search-service}
-      APP_ENV: ${APP_ENV:-release}
-
-      GRPC_PORT: ${GRPC_PORT:-50052}
-      GRPC_REFLECTION_ENABLED: ${GRPC_REFLECTION_ENABLED:-true}
-
-      ELASTICSEARCH_ADDRESSES: ${ELASTICSEARCH_ADDRESSES:-http://elasticsearch:9200}
-      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-}
-      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-}
-      ELASTICSEARCH_PROPERTY_INDEX: ${ELASTICSEARCH_PROPERTY_INDEX:-nexus_estate_properties}
-
-      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: ${REDIS_DB:-0}
-      REDIS_SEARCH_TTL_SECONDS: ${REDIS_SEARCH_TTL_SECONDS:-60}
-
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      APP_ENV: development
+      CORE_SERVICE_NAME: nexus-core
+      CORE_GRPC_PORT: "50051"
+      CORE_GRPC_REFLECTION_ENABLED: "true"
     ports:
-      - "${GRPC_PORT:-50052}:50052"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - nexus-estate-network
-    profiles:
-      - release
+      - "${CORE_GRPC_PORT:-50051}:50051"
+    stop_grace_period: 15s
 
-  search-service-production:
+  worker:
+    profiles: [platform]
     build:
       context: .
-      dockerfile: Dockerfile
-      target: production
+      target: worker
       args:
-        GO_VERSION: ${GO_VERSION:-1.23}
-        ALPINE_VERSION: ${ALPINE_VERSION:-3.20}
-        VERSION: ${APP_VERSION:-production}
-        COMMIT: ${APP_COMMIT:-local}
-        BUILD_DATE: ${BUILD_DATE:-local}
-    image: nexus-estate-search-service:${APP_IMAGE_TAG:-production}
-    container_name: nexus-estate-search-service-production
-    restart: always
+        GO_VERSION: ${GO_VERSION:-1.25.0}
+    image: nexus-worker:local
     environment:
-      APP_NAME: ${APP_NAME:-nexus-estate-search-service}
-      APP_ENV: ${APP_ENV:-production}
-
-      GRPC_PORT: ${GRPC_PORT:-50052}
-      GRPC_REFLECTION_ENABLED: ${GRPC_REFLECTION_ENABLED:-false}
-
-      ELASTICSEARCH_ADDRESSES: ${ELASTICSEARCH_ADDRESSES}
-      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-}
-      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-}
-      ELASTICSEARCH_PROPERTY_INDEX: ${ELASTICSEARCH_PROPERTY_INDEX:-nexus_estate_properties}
-
-      REDIS_ADDR: ${REDIS_ADDR}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: ${REDIS_DB:-0}
-      REDIS_SEARCH_TTL_SECONDS: ${REDIS_SEARCH_TTL_SECONDS:-300}
-
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-    ports:
-      - "${GRPC_PORT:-50052}:50052"
-    networks:
-      - nexus-estate-network
-    profiles:
-      - production
+      APP_ENV: development
+    stop_grace_period: 15s
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTICSEARCH_VERSION:-8.14.3}
-    container_name: nexus-estate-elasticsearch
-    restart: unless-stopped
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms512m -Xmx512m}
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
       - "${ELASTICSEARCH_PORT:-9200}:9200"
     volumes:
       - nexus_estate_es_data:/usr/share/elasticsearch/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"
-        ]
+      test: [CMD-SHELL, 'curl -fsS "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s" >/dev/null']
       interval: 10s
-      timeout: 5s
+      timeout: 6s
       retries: 12
       start_period: 30s
-    networks:
-      - nexus-estate-network
-    profiles:
-      - develop
-      - release
 
   redis:
     image: redis:${REDIS_VERSION:-7.2-alpine}
-    container_name: nexus-estate-redis
-    restart: unless-stopped
-    command:
-      [
-        "redis-server",
-        "--appendonly",
-        "yes"
-      ]
+    command: [redis-server, --appendonly, "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - nexus_estate_redis_data:/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "redis-cli",
-          "ping"
-        ]
+      test: [CMD, redis-cli, ping]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 10s
-    networks:
-      - nexus-estate-network
-    profiles:
-      - develop
-      - release
-
-networks:
-  nexus-estate-network:
-    driver: bridge
 
 volumes:
   nexus_estate_es_data:
   nexus_estate_redis_data:
-  go_mod_cache:
-  go_build_cache:
