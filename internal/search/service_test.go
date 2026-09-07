@@ -121,3 +121,16 @@ func TestCacheKeyDeterminism(t *testing.T) {
 		t.Fatalf("empty request cache key changed: %s", got)
 	}
 }
+
+func TestServiceNormalizesPaginationBeforeCache(t *testing.T) {
+	repo := &fakeRepo{result: &PropertySearchResponse{Page: 2, Limit: 100}}
+	cache := &fakeCache{}
+	_, err := NewService(repo, cache, 60).SearchProperties(context.Background(), PropertySearchRequest{Page: 2, Limit: 101})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := PropertySearchRequest{Page: 2, Limit: 100}
+	if repo.request != want || cache.key != buildSearchCacheKey(want) {
+		t.Fatalf("pagination must be normalized before cache lookup and repository: request=%+v key=%s", repo.request, cache.key)
+	}
+}

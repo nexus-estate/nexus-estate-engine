@@ -33,6 +33,7 @@ func NewService(repo Repository, redisClient Cache, cacheTTLSeconds int) Service
 }
 
 func (s *service) SearchProperties(ctx context.Context, req PropertySearchRequest) (*PropertySearchResponse, error) {
+	req.Page, req.Limit = normalizePagination(req.Page, req.Limit)
 	cacheKey := buildSearchCacheKey(req)
 
 	if s.redis != nil {

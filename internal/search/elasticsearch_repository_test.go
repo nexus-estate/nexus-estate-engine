@@ -49,6 +49,9 @@ func TestRepositoryPagination(t *testing.T) {
 	}{
 		{"defaults", 0, 0, 0, 1, 20, 21, 2},
 		{"negative", -1, -5, 0, 1, 20, 0, 0},
+		{"above maximum", 1, 101, 0, 1, 100, 101, 2},
+		{"maximum second page", 2, 100, 100, 2, 100, 201, 3},
+		{"clamped second page", 2, 1000000, 100, 2, 100, 200, 2},
 		{"second page", 2, 10, 10, 2, 10, 21, 3},
 		{"exact multiple", 3, 10, 20, 3, 10, 30, 3},
 	} {

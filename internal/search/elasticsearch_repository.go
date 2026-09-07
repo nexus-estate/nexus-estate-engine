@@ -23,16 +23,7 @@ func NewElasticsearchRepository(client *es.Client, index string) Repository {
 }
 
 func (r *ElasticsearchRepository) SearchProperties(ctx context.Context, req PropertySearchRequest) (*PropertySearchResponse, error) {
-	page := req.Page
-	limit := req.Limit
-
-	if page <= 0 {
-		page = 1
-	}
-
-	if limit <= 0 {
-		limit = 20
-	}
+	page, limit := normalizePagination(req.Page, req.Limit)
 
 	from := (page - 1) * limit
 
