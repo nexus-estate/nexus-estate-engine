@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -19,6 +23,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install pinned protobuf tools
+        run: |
+          PROTOC_VERSION=$(awk '/^PROTOC_VERSION :=/ {print $3}' Makefile)
+          GO_PLUGIN_VERSION=$(awk '/^PROTOC_GEN_GO_VERSION :=/ {print $3}' Makefile)
+          GRPC_PLUGIN_VERSION=$(awk '/^PROTOC_GEN_GO_GRPC_VERSION :=/ {print $3}' Makefile)
+          curl --fail --location --retry 3 "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" -o "$RUNNER_TEMP/protoc.zip"
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          echo "$RUNNER_TEMP/protoc/bin" >> "$GITHUB_PATH"
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@"$GO_PLUGIN_VERSION"
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@"$GRPC_PLUGIN_VERSION"
+      - name: Verify generated protobuf code
+        run: |
+          make proto
+          git diff --exit-code -- proto gen
       - run: go mod download
       - name: Formatting
         run: test -z "$(gofmt -l .)"
