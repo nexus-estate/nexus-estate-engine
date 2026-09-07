@@ -26,11 +26,11 @@ func RunSearch(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
-	esClient, err := esinfra.NewClient(cfg.Elasticsearch)
+	esClient, closeES, err := esinfra.NewClient(cfg.Elasticsearch)
 	if err != nil {
 		return err
 	}
-	defer esinfra.Close(esClient)
+	defer closeES()
 	cacheCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	redisClient, err := redisinfra.NewClient(cacheCtx, cfg.Redis)
 	cancel()

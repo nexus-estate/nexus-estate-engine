@@ -9,13 +9,15 @@ import (
 	"github.com/nexus-estate/nexus-estate-platform-engine/internal/platform/config"
 )
 
-func NewClient(cfg config.ElasticsearchConfig) (*es.Client, error) {
-	return es.NewClient(es.Config{
+func NewClient(cfg config.ElasticsearchConfig) (*es.Client, func(), error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client, err := es.NewClient(es.Config{
 		Addresses: cfg.Addresses,
 		Username:  cfg.Username,
 		Password:  cfg.Password,
-		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+		Transport: transport,
 	})
+	return client, transport.CloseIdleConnections, err
 }
 
 func Ping(ctx context.Context, client *es.Client) error {
@@ -28,10 +30,4 @@ func Ping(ctx context.Context, client *es.Client) error {
 		return fmt.Errorf("elasticsearch health: %s", res.Status())
 	}
 	return nil
-}
-
-func Close(client *es.Client) {
-	if transport, ok := client.Transport.(interface{ CloseIdleConnections() }); ok {
-		transport.CloseIdleConnections()
-	}
 }
