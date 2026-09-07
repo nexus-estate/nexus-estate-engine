@@ -51,6 +51,11 @@ runs without caching; later read/write errors fall back to Elasticsearch. Each
 cache operation has a 500 ms budget, with retries disabled, so an unavailable
 cache cannot consume the full Search request deadline.
 
+Search pagination uses page 1 for non-positive pages, limit 20 for non-positive
+limits, and caps limits at 100. The response reports the effective page and limit.
+Offset pagination remains in use; deep pages remain subject to Elasticsearch
+result-window limits.
+
 ## Build and verify
 
 ```sh
@@ -69,14 +74,17 @@ Do not keep a stale `GO_VERSION` override in `.env`.
 
 Unit tests cover query/filter construction, pagination, deterministic cache keys,
 cache hit/miss/error behavior, gRPC field mapping, config compatibility, dependency
-health and forced shutdown. The optional live integration test is documented in
+health and forced shutdown. Required CI runs unit/race checks, binary builds and
+all three Docker builds. Real Elasticsearch and Redis fallback smoke tests are
+manual/local and remain opt-in via `SEARCH_INTEGRATION_ADDR`, as documented in
 [deploy/README.md](deploy/README.md).
 
 ## Protobuf
 
 The contract currently lives in `proto/search/v1/search.proto`. Generated Go is
 checked into `gen/search/v1`; no external contract repository is assumed.
-Install `protoc` (generated files currently use 7.36.0) and these plugins:
+Install the official `protoc` **36.0** release (reported as 7.36.0 in generated
+Go headers) and these pinned plugins:
 
 ```sh
 go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
@@ -88,7 +96,9 @@ make proto
 The foundation changes only `go_package`: wire package
 `nexusestate.search.v1`, service/RPC names, field numbers and optional presence
 remain unchanged. Review contract changes before implementation and regenerate
-with `make proto`; do not hand-edit generated files.
+with `make proto`; do not hand-edit generated files. `make proto` checks all three
+tool versions against the pins in `Makefile`. CI installs those exact versions,
+regenerates, and runs `git diff --exit-code -- proto gen` before tests.
 
 ## Modules and deployment
 
