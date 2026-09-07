@@ -52,7 +52,7 @@ func (r *ElasticsearchRepository) SearchProperties(ctx context.Context, req Prop
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() {
 		data, _ := io.ReadAll(res.Body)
