@@ -1,85 +1,37 @@
-APP_NAME=nexus-estate-search-service
+GO_VERSION := $(shell awk '/^go / {print $$2}' go.mod)
+MODULE := $(shell awk '/^module / {print $$2}' go.mod)
+RUNTIMES := search engine worker
 
-ENV_FILE ?= .env.develop
-PROFILE ?= develop
-
-.PHONY: proto
-proto:
-	protoc \
-		--go_out=. \
-		--go_opt=module=github.com/nexus-estate/nexus-estate-platform-engine \
-		--go-grpc_out=. \
-		--go-grpc_opt=module=github.com/nexus-estate/nexus-estate-platform-engine \
-		proto/search/v1/search.proto
-
-.PHONY: tidy
-tidy:
-	go mod tidy
-
-.PHONY: run
-run:
-	go run ./cmd/server
-
-.PHONY: build
-build:
-	go build -trimpath -ldflags="-s -w" -o bin/$(APP_NAME) ./cmd/server
-
-.PHONY: test
+.PHONY: fmt lint vet test test-race tidy check proto build dev-search down $(addprefix run-,$(RUNTIMES)) $(addprefix build-,$(RUNTIMES)) $(addprefix docker-,$(RUNTIMES))
+fmt:
+	gofmt -w cmd internal gen
+lint:
+	golangci-lint run
+vet:
+	go vet ./...
 test:
 	go test ./...
-
-.PHONY: docker-build-dev
-docker-build-dev:
-	docker build --target development -t $(APP_NAME):develop .
-
-.PHONY: docker-build-release
-docker-build-release:
-	docker build --target release -t $(APP_NAME):release .
-
-.PHONY: docker-build-prod
-docker-build-prod:
-	docker build --target production -t $(APP_NAME):production .
-
-.PHONY: dev
-dev:
-	docker compose --env-file .env --profile develop up -d --build
-
-.PHONY: dev-logs
-dev-logs:
-	docker compose --env-file .env --profile develop logs -f search-service
-
-.PHONY: release
-release:
-	docker compose --env-file .env --profile release up -d --build
-
-.PHONY: release-logs
-release-logs:
-	docker compose --env-file .env --profile release logs -f search-service-release
-
-.PHONY: prod
-prod:
-	docker compose --env-file .env --profile production up -d --build
-
-.PHONY: prod-logs
-prod-logs:
-	docker compose --env-file .env --profile production logs -f search-service-production
-
-.PHONY: down
+test-race:
+	go test -race ./...
+tidy:
+	go mod tidy
+check:
+	test -z "$$(gofmt -l .)"
+	go vet ./...
+	golangci-lint run
+	go test -race ./...
+	go mod tidy
+	git diff --exit-code -- go.mod go.sum
+proto:
+	protoc --go_out=. --go_opt=module=$(MODULE) --go-grpc_out=. --go-grpc_opt=module=$(MODULE) proto/search/v1/search.proto
+$(addprefix run-,$(RUNTIMES)): run-%:
+	go run ./cmd/$*
+$(addprefix build-,$(RUNTIMES)): build-%:
+	go build -trimpath -ldflags="-s -w" -o bin/nexus-$* ./cmd/$*
+build: $(addprefix build-,$(RUNTIMES))
+$(addprefix docker-,$(RUNTIMES)): docker-%:
+	docker build --build-arg GO_VERSION=$(GO_VERSION) --target $* -t nexus-$*:local .
+dev-search:
+	GO_VERSION=$(GO_VERSION) docker compose up -d --build search elasticsearch redis
 down:
-	docker compose --profile develop --profile release --profile production down
-
-.PHONY: down-volume
-down-volume:
-	docker compose --profile develop --profile release --profile production down -v
-
-.PHONY: ps
-ps:
-	docker compose --profile develop --profile release --profile production ps
-
-.PHONY: grpc-list
-grpc-list:
-	grpcurl -plaintext localhost:50052 list
-
-.PHONY: grpc-describe
-grpc-describe:
-	grpcurl -plaintext localhost:50052 describe nexusestate.search.v1.SearchService
+	docker compose --profile platform down
