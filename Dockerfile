@@ -15,7 +15,7 @@ ARG AIR_VERSION=v1.61.7
 RUN go install github.com/air-verse/air@${AIR_VERSION}
 COPY . .
 EXPOSE 50052
-CMD ["air", "-c", ".air.search.toml"]
+CMD ["air", "-c", ".air.toml"]
 
 FROM deps AS build-search
 COPY . .
