@@ -43,11 +43,13 @@ make run-worker
 ```
 
 Environment variables override `.env`. Search-specific settings take precedence
- over legacy `APP_NAME`, `GRPC_PORT` and `GRPC_REFLECTION_ENABLED` aliases, which
+over legacy `APP_NAME`, `GRPC_PORT` and `GRPC_REFLECTION_ENABLED` aliases, which
 remain supported for existing deployment configurations. Legacy aliases do not
 configure engine or worker. Reflection defaults off when `APP_ENV=production`;
 explicit settings are respected. Redis is optional: failure to connect at startup
-runs without caching; later read/write errors fall back to Elasticsearch.
+runs without caching; later read/write errors fall back to Elasticsearch. Each
+cache operation has a 500 ms budget, with retries disabled, so an unavailable
+cache cannot consume the full Search request deadline.
 
 ## Build and verify
 
@@ -57,7 +59,7 @@ make fmt
 make vet
 make test
 make test-race
-make lint               # requires golangci-lint v2
+make lint               # requires golangci-lint v2.13.2
 make check              # formatting, vet, lint, race, module tidiness
 ```
 
