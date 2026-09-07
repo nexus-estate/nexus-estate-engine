@@ -1,0 +1,12 @@
+services:
+  search:
+    build:
+      target: development
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+
+volumes:
+  go_mod_cache:
+  go_build_cache:

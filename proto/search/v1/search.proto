@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nexusestate.search.v1;
 
-option go_package = "github.com/NexusEstate/nexus-estate-search-service/gen/search/v1;searchv1";
+option go_package = "github.com/nexus-estate/nexus-estate-engine/gen/search/v1;searchv1";
 
 service SearchService {
   rpc SearchProperties(SearchPropertiesRequest) returns (SearchPropertiesResponse);
