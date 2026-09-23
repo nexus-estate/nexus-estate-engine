@@ -124,8 +124,11 @@ regenerates, and runs `git diff --exit-code -- proto gen` before tests.
 
 `cmd/*` contains process entry points; `internal/app` composes each runtime.
 Search models, repository interface, Elasticsearch query adapter and gRPC adapter
-live together in `internal/search`. Technical config, logging, client setup,
-gRPC lifecycle and shutdown live in `internal/platform`.
+live together in `internal/search`. The canonical Listing-centric projection
+document that indexing, reindex and Search v2 will materialize lives in
+`internal/marketplace`; Search v1 keeps its own item contract and query path.
+Technical config, logging, client setup, gRPC lifecycle and shutdown live in
+`internal/platform`.
 
 Add a bounded module only when a concrete feature needs it. Keep domain behavior
 inside that module and wire it in an app composition root. Do not add empty future

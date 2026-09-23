@@ -74,6 +74,7 @@ jobs:
       ELASTICSEARCH_PORT: 19200
       REDIS_PORT: 16379
       SEARCH_INTEGRATION_ADDR: localhost:15052
+      MARKETPLACE_INTEGRATION_ES_ADDR: http://localhost:19200
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -119,6 +120,13 @@ jobs:
             go test -v -count=1 -run '^TestSearchRuntime$' ./test/integration 2>&1 | tee /tmp/search-integration-no-redis.log
           if grep -q -- 'SKIP: TestSearchRuntime' /tmp/search-integration-no-redis.log; then
             echo 'Search integration was skipped'
+            exit 1
+          fi
+      - name: Exercise the marketplace listing index contract and search gates
+        run: |
+          go test -v -count=1 -run '^TestMarketplaceListing' ./test/integration 2>&1 | tee /tmp/marketplace-index-integration.log
+          if grep -q -- 'SKIP: TestMarketplaceListing' /tmp/marketplace-index-integration.log; then
+            echo 'Marketplace index integration was skipped'
             exit 1
           fi
       - name: Verify Elasticsearch controls readiness without restarting Search

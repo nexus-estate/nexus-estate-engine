@@ -44,10 +44,16 @@ SEARCH_INTEGRATION_ADDR=localhost:50052 SEARCH_EXPECT_NOT_SERVING=1 go test -cou
 # Verify fallback after optional Redis becomes unavailable:
 docker compose -p nexus-foundation-check stop redis
 SEARCH_INTEGRATION_ADDR=localhost:50052 go test -count=1 ./test/integration
+# Create the marketplace listing index from the checked-in definition in the test
+# Elasticsearch, verify the canonical document contract and the search gates:
+MARKETPLACE_INTEGRATION_ES_ADDR=http://localhost:19200 go test -count=1 -run '^TestMarketplaceListing' ./test/integration
 # Stop only the test project's containers; volumes are retained.
 docker compose -p nexus-foundation-check down
 ```
 
 This checks standard gRPC readiness and the original SearchProperties RPC against
-real Elasticsearch. The default unit/race suite requires no external services;
-shutdown unit tests also exercise a blocked RPC and deadline-based forced stop.
+real Elasticsearch. `MARKETPLACE_INTEGRATION_ES_ADDR` is the test Elasticsearch
+URL, and the marketplace tests create only their own
+`nexus_estate_marketplace_*_integration` indexes, which they delete after the run.
+The default unit/race suite requires no external services; shutdown unit tests also
+exercise a blocked RPC and deadline-based forced stop.
