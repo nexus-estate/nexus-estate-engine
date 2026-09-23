@@ -57,6 +57,7 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 		Type       string                    `json:"type"`
 		Dynamic    string                    `json:"dynamic"`
 		Properties map[string]mappedProperty `json:"properties"`
+		Fields     map[string]mappedProperty `json:"fields"`
 	}
 	var parsed map[string]struct {
 		Mappings struct {
@@ -75,17 +76,27 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 		t.Fatalf("dynamic = %q, want strict", index.Mappings.Dynamic)
 	}
 	for field, wantType := range map[string]string{
-		"listing_id":   "keyword",
-		"property_id":  "keyword",
-		"title":        "text",
-		"price":        "double",
-		"area":         "double",
-		"location":     "geo_point",
-		"published_at": "date",
-		"updated_at":   "date",
+		"listing_id":    "keyword",
+		"property_id":   "keyword",
+		"title":         "text",
+		"price":         "long",
+		"area":          "double",
+		"province_id":   "keyword",
+		"province_name": "text",
+		"ward_id":       "keyword",
+		"ward_name":     "text",
+		"address":       "text",
+		"location":      "geo_point",
+		"published_at":  "date",
+		"updated_at":    "date",
 	} {
 		if got := index.Mappings.Properties[field].Type; got != wantType {
 			t.Fatalf("field %q type = %q, want %q", field, got, wantType)
+		}
+	}
+	for _, field := range []string{"province_name", "ward_name", "address"} {
+		if got := index.Mappings.Properties[field].Fields["keyword"].Type; got != "keyword" {
+			t.Fatalf("field %q keyword mapping = %q, want keyword", field, got)
 		}
 	}
 	projectionState := index.Mappings.Properties["projection_state"]
@@ -93,12 +104,13 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 	// response, but the nested properties and dynamic mode must still be present.
 	if (projectionState.Type != "" && projectionState.Type != "object") || projectionState.Dynamic != "strict" ||
 		projectionState.Properties["source_revision"].Type != "long" ||
-		projectionState.Properties["deleted"].Type != "boolean" {
-		t.Fatalf("projection_state mapping = %+v, want strict source_revision/deleted object", projectionState)
+		projectionState.Properties["deleted"].Type != "boolean" ||
+		projectionState.Properties["payload_hash"].Type != "keyword" {
+		t.Fatalf("projection_state mapping = %+v, want strict source_revision/deleted/payload_hash object", projectionState)
 	}
 	media := index.Mappings.Properties["media"]
-	if media.Properties["images"].Type != "keyword" || media.Properties["cover_image"].Type != "keyword" {
-		t.Fatalf("media mapping = %+v, want keyword images and cover_image", media)
+	if media.Properties["images"].Type != "keyword" {
+		t.Fatalf("media mapping = %+v, want keyword images only", media)
 	}
 }
 
@@ -162,7 +174,8 @@ func assertAppliedSettings(ctx context.Context, t *testing.T, client *es.Client)
 func assertDocumentRoundTrip(ctx context.Context, t *testing.T, client *es.Client) {
 	t.Helper()
 
-	document := integrationListingDocument(t, "listing-integration-1", "Sunny villa in district one", "HCM")
+	document := integrationListingDocument(t, "listing-integration-1", "Sunny villa in Hồ Chí Minh", "Hồ Chí Minh")
+	document.Price = 9_007_199_254_740_993
 	seedListingDocuments(ctx, t, client, marketplaceIndexName, document)
 
 	res, err := client.Get(
@@ -230,7 +243,7 @@ func assertUnmappedProjectionStateFieldRejected(ctx context.Context, t *testing.
 	t.Helper()
 
 	const documentID = "strict-projection-state-check"
-	payload := `{"listing_id":"` + documentID + `","projection_state":{"source_revision":1,"deleted":true,"unexpected":"value"}}`
+	payload := `{"listing_id":"` + documentID + `","projection_state":{"source_revision":1,"deleted":true,"payload_hash":"sha256:deleted","unexpected":"value"}}`
 
 	res, err := client.Index(
 		marketplaceIndexName,
@@ -272,7 +285,7 @@ func assertOutOfRangeGeoRejected(ctx context.Context, t *testing.T, client *es.C
 	}
 }
 
-func integrationListingDocument(t *testing.T, listingID, title, city string) marketplace.MarketplaceListingDocument {
+func integrationListingDocument(t *testing.T, listingID, title, provinceName string) marketplace.MarketplaceListingDocument {
 	t.Helper()
 
 	published := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
@@ -284,22 +297,22 @@ func integrationListingDocument(t *testing.T, listingID, title, city string) mar
 		PropertyID: "property-" + listingID,
 
 		Title:       title,
-		Slug:        "listing-slug",
 		Description: "Three bedroom villa",
-		Type:        "villa",
-		Purpose:     "sale",
+		Type:        marketplace.EstateTypeVilla,
+		Purpose:     marketplace.EstatePurposeSale,
 
-		Price: float64Pointer(1_250_000_000),
+		Price: 1_250_000_000,
 		Area:  float64Pointer(220),
 
-		City:     city,
-		District: "1",
-		Ward:     "Ben Nghe",
-		Address:  "12 Le Loi",
+		ProvinceID:   "30000000-0000-4000-8000-000000000001",
+		ProvinceName: provinceName,
+		WardID:       "30000000-0000-4000-8000-000000000002",
+		WardName:     "Bến Nghé",
+		Address:      "12 Lê Lợi",
 
 		Location: &marketplace.GeoPoint{Lat: &latitude, Lon: &longitude},
 
-		Media: marketplace.MediaSummary{Images: []string{"a.jpg", "b.jpg"}, CoverImage: "a.jpg"},
+		Media: &marketplace.MediaSummary{Images: []string{"a.jpg", "b.jpg"}},
 
 		PublishedAt: &published,
 		UpdatedAt:   updated,

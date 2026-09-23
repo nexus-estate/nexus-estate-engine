@@ -54,9 +54,6 @@ const ListingIndexDefinition = `{
           }
         }
       },
-      "slug": {
-        "type": "keyword"
-      },
       "description": {
         "type": "text",
         "analyzer": "listing_text"
@@ -68,12 +65,15 @@ const ListingIndexDefinition = `{
         "type": "keyword"
       },
       "price": {
-        "type": "double"
+        "type": "long"
       },
       "area": {
         "type": "double"
       },
-      "city": {
+      "province_id": {
+        "type": "keyword"
+      },
+      "province_name": {
         "type": "text",
         "analyzer": "listing_text",
         "fields": {
@@ -83,17 +83,10 @@ const ListingIndexDefinition = `{
           }
         }
       },
-      "district": {
-        "type": "text",
-        "analyzer": "listing_text",
-        "fields": {
-          "keyword": {
-            "type": "keyword",
-            "ignore_above": 256
-          }
-        }
+      "ward_id": {
+        "type": "keyword"
       },
-      "ward": {
+      "ward_name": {
         "type": "text",
         "analyzer": "listing_text",
         "fields": {
@@ -120,9 +113,6 @@ const ListingIndexDefinition = `{
         "properties": {
           "images": {
             "type": "keyword"
-          },
-          "cover_image": {
-            "type": "keyword"
           }
         }
       },
@@ -143,6 +133,9 @@ const ListingIndexDefinition = `{
           },
           "deleted": {
             "type": "boolean"
+          },
+          "payload_hash": {
+            "type": "keyword"
           }
         }
       }

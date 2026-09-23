@@ -118,7 +118,7 @@ func TestListingIndexDefinitionMatchesDocumentContract(t *testing.T) {
 	if !reflect.DeepEqual(gotState, wantState) {
 		t.Fatalf("projection_state fields must match ordering metadata:\ngot  %v\nwant %v", gotState, wantState)
 	}
-	if state.Properties["source_revision"].Type != "long" || state.Properties["deleted"].Type != "boolean" {
+	if state.Properties["source_revision"].Type != "long" || state.Properties["deleted"].Type != "boolean" || state.Properties["payload_hash"].Type != "keyword" {
 		t.Fatalf("projection_state field types are invalid: %+v", state.Properties)
 	}
 
@@ -155,17 +155,21 @@ func TestListingIndexDefinitionFieldTypes(t *testing.T) {
 	properties := definition.Mappings.Properties
 
 	for field, wantType := range map[string]string{
-		"listing_id":   "keyword",
-		"property_id":  "keyword",
-		"slug":         "keyword",
-		"type":         "keyword",
-		"purpose":      "keyword",
-		"description":  "text",
-		"price":        "double",
-		"area":         "double",
-		"location":     "geo_point",
-		"published_at": "date",
-		"updated_at":   "date",
+		"listing_id":    "keyword",
+		"property_id":   "keyword",
+		"type":          "keyword",
+		"purpose":       "keyword",
+		"description":   "text",
+		"price":         "long",
+		"area":          "double",
+		"province_id":   "keyword",
+		"province_name": "text",
+		"ward_id":       "keyword",
+		"ward_name":     "text",
+		"address":       "text",
+		"location":      "geo_point",
+		"published_at":  "date",
+		"updated_at":    "date",
 	} {
 		got, ok := properties[field]
 		if !ok {
@@ -182,9 +186,8 @@ func TestListingIndexDefinitionFieldTypes(t *testing.T) {
 		}
 	}
 
-	// Filterable and sortable text keeps a keyword subfield for exact terms, the
-	// same shape Search v1 relies on for its city/district term filters.
-	for _, field := range []string{"title", "city", "district", "ward", "address"} {
+	// Source names and address remain searchable and retain exact-value fields.
+	for _, field := range []string{"title", "province_name", "ward_name", "address"} {
 		mapped := properties[field]
 		if mapped.Type != "text" {
 			t.Fatalf("field %q type = %q, want text", field, mapped.Type)
@@ -196,12 +199,12 @@ func TestListingIndexDefinitionFieldTypes(t *testing.T) {
 
 	// Every searchable text field must use the folding analyzer and every exact
 	// field must stay on the keyword analyzer the keyword subfields rely on.
-	for _, field := range []string{"title", "description", "city", "district", "ward", "address"} {
+	for _, field := range []string{"title", "description", "province_name", "ward_name", "address"} {
 		if got := properties[field].Analyzer; got != listingTextAnalyzer {
 			t.Fatalf("field %q analyzer = %q, want %q", field, got, listingTextAnalyzer)
 		}
 	}
-	for _, field := range []string{"listing_id", "property_id", "slug", "type", "purpose", "published_at", "updated_at"} {
+	for _, field := range []string{"listing_id", "property_id", "province_id", "ward_id", "type", "purpose", "published_at", "updated_at"} {
 		if got := properties[field].Analyzer; got != "" {
 			t.Fatalf("field %q must not set an analyzer, got %q", field, got)
 		}

@@ -253,22 +253,22 @@ func listingDocument(listingID string, apply func(*marketplace.MarketplaceListin
 		PropertyID: "property-" + listingID,
 
 		Title:       "Nhà phố",
-		Slug:        "listing-slug",
 		Description: "Nhà phố mặt tiền",
-		Type:        "house",
-		Purpose:     "sale",
+		Type:        marketplace.EstateTypeHouse,
+		Purpose:     marketplace.EstatePurposeSale,
 
-		Price: float64Pointer(1_000_000_000),
+		Price: 1_000_000_000,
 		Area:  float64Pointer(100),
 
-		City:     "Hồ Chí Minh",
-		District: "Quận 1",
-		Ward:     "Bến Nghé",
-		Address:  "12 Lê Lợi",
+		ProvinceID:   "30000000-0000-4000-8000-000000000001",
+		ProvinceName: "Hồ Chí Minh",
+		WardID:       "30000000-0000-4000-8000-000000000002",
+		WardName:     "Bến Nghé",
+		Address:      "12 Lê Lợi",
 
 		Location: &marketplace.GeoPoint{Lat: &latitude, Lon: &longitude},
 
-		Media: marketplace.MediaSummary{Images: []string{"a.jpg"}, CoverImage: "a.jpg"},
+		Media: &marketplace.MediaSummary{Images: []string{"a.jpg"}},
 
 		PublishedAt: &published,
 		UpdatedAt:   updated,

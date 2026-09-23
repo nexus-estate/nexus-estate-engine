@@ -7,7 +7,7 @@ import (
 )
 
 // The filter gate gets its own test-owned index so its corpus stays separate from
-// the text-relevance corpora, which carry different titles and districts.
+// the text-relevance corpora, which carry different titles and source content.
 const relevanceFilterIndexName = "nexus_estate_marketplace_relevance_filter_integration"
 
 // TestMarketplaceListingSearchFilters covers the remaining queryable fields: the
@@ -103,26 +103,34 @@ func relevanceFilterListings() []marketplace.MarketplaceListingDocument {
 	districtSevenLatitude, districtSevenLongitude := 10.7300, 106.7200
 	hanoiLatitude, hanoiLongitude := 21.0278, 105.8342
 
-	unknownArea := filterListing("listing-filter-area-unknown", "Căn hộ chưa rõ diện tích", 500_000_000, 1, nil, nil)
+	unknownArea := filterListing("listing-filter-area-unknown", "Căn hộ chưa rõ diện tích", marketplace.EstateTypeApartment, 500_000_000, 1, nil, nil)
 	unknownArea.Area = nil
+	thaoDien := filterListing("listing-filter-2", "Căn hộ Thảo Điền", marketplace.EstateTypeApartment, 2_500_000_000, 120.5, &thaoDienLatitude, &thaoDienLongitude)
+	thaoDien.WardID, thaoDien.WardName = "30000000-0000-4000-8000-000000000004", "Thảo Điền"
+	quanBay := filterListing("listing-filter-3", "Nhà phố Quận 7", marketplace.EstateTypeHouse, 5_000_000_000, 220, &districtSevenLatitude, &districtSevenLongitude)
+	quanBay.WardID, quanBay.WardName = "30000000-0000-4000-8000-000000000003", "Tân Phú"
+	hanoi := filterListing("listing-filter-hanoi", "Nhà phố Hà Nội", marketplace.EstateTypeHouse, 4_000_000_000, 70, &hanoiLatitude, &hanoiLongitude)
+	hanoi.ProvinceID, hanoi.ProvinceName = "40000000-0000-4000-8000-000000000001", "Hà Nội"
+	hanoi.WardID, hanoi.WardName = "40000000-0000-4000-8000-000000000002", "Phúc Tân"
 
 	return []marketplace.MarketplaceListingDocument{
-		filterListing("listing-filter-1", "Căn hộ Quận 1", 1_000_000_000, 50, &districtOneLatitude, &districtOneLongitude),
-		filterListing("listing-filter-2", "Căn hộ Thảo Điền", 2_500_000_000, 120.5, &thaoDienLatitude, &thaoDienLongitude),
-		filterListing("listing-filter-3", "Nhà phố Quận 7", 5_000_000_000, 220, &districtSevenLatitude, &districtSevenLongitude),
-		filterListing("listing-filter-hanoi", "Nhà phố Hà Nội", 4_000_000_000, 70, &hanoiLatitude, &hanoiLongitude),
-		filterListing("listing-filter-zero-price", "Đất nền Quận 2", 0, 25, nil, nil),
-		filterListing("listing-filter-no-geo", "Căn hộ Quận 4", 3_000_000_000, 80, nil, nil),
+		filterListing("listing-filter-1", "Căn hộ Quận 1", marketplace.EstateTypeApartment, 1_000_000_000, 50, &districtOneLatitude, &districtOneLongitude),
+		thaoDien,
+		quanBay,
+		hanoi,
+		filterListing("listing-filter-zero-price", "Đất nền Quận 2", marketplace.EstateTypeLand, 0, 25, nil, nil),
+		filterListing("listing-filter-no-geo", "Căn hộ Quận 4", marketplace.EstateTypeApartment, 3_000_000_000, 80, nil, nil),
 		unknownArea,
 	}
 }
 
 // filterListing builds a valid document with explicit metrics. A nil coordinate pair
 // means the listing has no geo point.
-func filterListing(listingID, title string, price, area float64, latitude, longitude *float64) marketplace.MarketplaceListingDocument {
+func filterListing(listingID, title string, estateType marketplace.EstateType, price int64, area float64, latitude, longitude *float64) marketplace.MarketplaceListingDocument {
 	return listingDocument(listingID, func(document *marketplace.MarketplaceListingDocument) {
 		document.Title = title
-		document.Price = float64Pointer(price)
+		document.Type = estateType
+		document.Price = price
 		document.Area = float64Pointer(area)
 		document.Location = nil
 		if latitude != nil && longitude != nil {

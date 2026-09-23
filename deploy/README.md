@@ -60,5 +60,8 @@ search behavior, then delete each index. CI supplies a private Compose Elasticse
 instance and fails if the marketplace tests are skipped. Projection ordering remains
 inactive until the API provides a monotonic per-listing source revision with
 lifecycle events or snapshots; see [the architecture contract](../docs/architecture.md).
+The canonical mapping uses API enum casing and province/ward IDs and names,
+integer `price` (`long`), nullable `area` (`double`), and a strict revision/hash
+metadata object. The Search v1 index and query path remain separate.
 The default unit/race suite requires no external services; shutdown unit tests also
 exercise a blocked RPC and deadline-based forced stop.

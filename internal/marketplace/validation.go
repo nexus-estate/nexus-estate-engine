@@ -18,17 +18,21 @@ var (
 	ErrMissingTitle       = errors.New("title is required")
 	ErrMissingType        = errors.New("type is required")
 	ErrMissingPurpose     = errors.New("purpose is required")
-	ErrMissingCity        = errors.New("city is required")
-	ErrMissingWard        = errors.New("ward is required")
+	ErrInvalidType        = errors.New("type must be an API EstateType value")
+	ErrInvalidPurpose     = errors.New("purpose must be an API EstatePurpose value")
+	ErrMissingProvinceID  = errors.New("province id is required")
+	ErrMissingProvince    = errors.New("province name is required")
+	ErrMissingWardID      = errors.New("ward id is required")
+	ErrMissingWardName    = errors.New("ward name is required")
 	ErrMissingAddress     = errors.New("address is required")
 	ErrMissingPublishedAt = errors.New("published at is required")
-	ErrMissingPrice       = errors.New("price is required")
-	ErrInvalidPrice       = errors.New("price must be a finite, non-negative number")
+	ErrInvalidPrice       = errors.New("price must be a non-negative integer")
 	ErrInvalidArea        = errors.New("area must be a finite, positive number when present")
 	ErrIncompleteGeo      = errors.New("location must set both lat and lon")
 	ErrInvalidLatitude    = errors.New("latitude must be a finite number within [-90, 90]")
 	ErrInvalidLongitude   = errors.New("longitude must be a finite number within [-180, 180]")
 	ErrMissingUpdatedAt   = errors.New("updated at is required")
+	ErrTooManyImages      = errors.New("media image count exceeds the marketplace projection limit")
 )
 
 // ValidationError is the typed, inspectable error returned by
@@ -53,8 +57,8 @@ func (e *ValidationError) Unwrap() error { return e.err }
 //
 // Required fields follow the API source contract: identity, required Estate
 // content/location and price, plus Listing publication/update timestamps. Area,
-// description, slug, district, media and coordinates may be absent. A zero price
-// is valid; an absent area is represented by nil.
+// description, media and coordinates may be absent. A zero price is valid; an
+// absent area is represented by nil. Enum values must preserve the API casing.
 func ValidateMarketplaceListingDocument(doc MarketplaceListingDocument) error {
 	if doc.ListingID == "" {
 		return invalid("listing_id", ErrMissingListingID)
@@ -68,14 +72,26 @@ func ValidateMarketplaceListingDocument(doc MarketplaceListingDocument) error {
 	if doc.Type == "" {
 		return invalid("type", ErrMissingType)
 	}
+	if !validEstateType(doc.Type) {
+		return invalid("type", ErrInvalidType)
+	}
 	if doc.Purpose == "" {
 		return invalid("purpose", ErrMissingPurpose)
 	}
-	if doc.City == "" {
-		return invalid("city", ErrMissingCity)
+	if !validEstatePurpose(doc.Purpose) {
+		return invalid("purpose", ErrInvalidPurpose)
 	}
-	if doc.Ward == "" {
-		return invalid("ward", ErrMissingWard)
+	if doc.ProvinceID == "" {
+		return invalid("province_id", ErrMissingProvinceID)
+	}
+	if doc.ProvinceName == "" {
+		return invalid("province_name", ErrMissingProvince)
+	}
+	if doc.WardID == "" {
+		return invalid("ward_id", ErrMissingWardID)
+	}
+	if doc.WardName == "" {
+		return invalid("ward_name", ErrMissingWardName)
 	}
 	if doc.Address == "" {
 		return invalid("address", ErrMissingAddress)
@@ -86,14 +102,14 @@ func ValidateMarketplaceListingDocument(doc MarketplaceListingDocument) error {
 	if doc.UpdatedAt.IsZero() {
 		return invalid("updated_at", ErrMissingUpdatedAt)
 	}
-	if doc.Price == nil {
-		return invalid("price", ErrMissingPrice)
-	}
-	if !finiteNonNegative(*doc.Price) {
+	if doc.Price < 0 {
 		return invalid("price", ErrInvalidPrice)
 	}
 	if doc.Area != nil && (!finite(*doc.Area) || *doc.Area <= 0) {
 		return invalid("area", ErrInvalidArea)
+	}
+	if doc.Media != nil && len(doc.Media.Images) > MaxMarketplaceImages {
+		return invalid("media.images", ErrTooManyImages)
 	}
 
 	if doc.Location != nil {
@@ -119,6 +135,23 @@ func finite(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
-func finiteNonNegative(v float64) bool {
-	return finite(v) && v >= 0
+func validEstateType(value EstateType) bool {
+	switch value {
+	case EstateTypeApartment, EstateTypeHouse, EstateTypeVilla, EstateTypeTownhouse,
+		EstateTypeLand, EstateTypeOffice, EstateTypeShophouse, EstateTypeWarehouse,
+		EstateTypeCommercial, EstateTypeHotel, EstateTypeResort, EstateTypeFarm,
+		EstateTypeOther:
+		return true
+	default:
+		return false
+	}
+}
+
+func validEstatePurpose(value EstatePurpose) bool {
+	switch value {
+	case EstatePurposeSale, EstatePurposeRent, EstatePurposeSaleOrRent:
+		return true
+	default:
+		return false
+	}
 }

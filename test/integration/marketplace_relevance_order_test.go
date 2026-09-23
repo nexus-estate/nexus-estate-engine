@@ -55,7 +55,7 @@ func TestMarketplaceListingSearchOrdering(t *testing.T) {
 		},
 		{
 			name:      "recency sort applies to a filtered subset",
-			body:      `{"query":{"term":{"city.keyword":"Hồ Chí Minh"}},` + recencySort + `}`,
+			body:      `{"query":{"term":{"province_name.keyword":"Hồ Chí Minh"}},` + recencySort + `}`,
 			wantTotal: 5,
 			wantIDs:   []string{"listing-order-7", "listing-order-6", "listing-order-4", "listing-order-2", "listing-order-1"},
 		},
@@ -120,7 +120,7 @@ func TestMarketplaceListingSearchOrdering(t *testing.T) {
 		},
 		{
 			name:      "paging composes with a filter",
-			body:      `{"query":{"term":{"city.keyword":"Hồ Chí Minh"}},` + recencySort + `,"from":2,"size":2}`,
+			body:      `{"query":{"term":{"province_name.keyword":"Hồ Chí Minh"}},` + recencySort + `,"from":2,"size":2}`,
 			wantTotal: 5,
 			wantIDs:   []string{"listing-order-4", "listing-order-2"},
 		},
@@ -135,27 +135,36 @@ func TestMarketplaceListingSearchOrdering(t *testing.T) {
 // because Elasticsearch does not guarantee a stable order for equal sort values.
 func relevanceOrderListings() []marketplace.MarketplaceListingDocument {
 	const (
-		hoChiMinh = "Hồ Chí Minh"
-		haNoi     = "Hà Nội"
-		daNang    = "Đà Nẵng"
+		hoChiMinhID     = "30000000-0000-4000-8000-000000000001"
+		haNoiID         = "40000000-0000-4000-8000-000000000001"
+		daNangID        = "50000000-0000-4000-8000-000000000001"
+		hoChiMinhWardID = "30000000-0000-4000-8000-000000000002"
+		haNoiWardID     = "40000000-0000-4000-8000-000000000002"
+		daNangWardID    = "50000000-0000-4000-8000-000000000002"
+		hoChiMinh       = "Hồ Chí Minh"
+		haNoi           = "Hà Nội"
+		daNang          = "Đà Nẵng"
 	)
 	sharedInstant := time.Date(2026, 5, 2, 8, 0, 0, 0, time.UTC)
 	return []marketplace.MarketplaceListingDocument{
-		orderListing("listing-order-1", "Nhà phố tháng một", hoChiMinh, time.Date(2026, 1, 5, 8, 0, 0, 0, time.UTC)),
-		orderListing("listing-order-2", "Căn hộ tháng hai", hoChiMinh, time.Date(2026, 2, 10, 8, 0, 0, 0, time.UTC)),
-		orderListing("listing-order-3", "Biệt thự Hà Nội", haNoi, time.Date(2026, 2, 28, 8, 0, 0, 0, time.UTC)),
-		orderListing("listing-order-4", "Căn hộ tháng ba", hoChiMinh, time.Date(2026, 3, 20, 8, 0, 0, 0, time.UTC)),
-		orderListing("listing-order-5", "Nhà phố Đà Nẵng", daNang, time.Date(2026, 4, 15, 8, 0, 0, 0, time.UTC)),
-		orderListing("listing-order-6", "Căn hộ đợt một", hoChiMinh, sharedInstant),
-		orderListing("listing-order-7", "Căn hộ đợt hai", hoChiMinh, sharedInstant),
+		orderListing("listing-order-1", "Nhà phố tháng một", hoChiMinhID, hoChiMinh, hoChiMinhWardID, "Bến Nghé", time.Date(2026, 1, 5, 8, 0, 0, 0, time.UTC)),
+		orderListing("listing-order-2", "Căn hộ tháng hai", hoChiMinhID, hoChiMinh, hoChiMinhWardID, "Bến Nghé", time.Date(2026, 2, 10, 8, 0, 0, 0, time.UTC)),
+		orderListing("listing-order-3", "Biệt thự Hà Nội", haNoiID, haNoi, haNoiWardID, "Phúc Tân", time.Date(2026, 2, 28, 8, 0, 0, 0, time.UTC)),
+		orderListing("listing-order-4", "Căn hộ tháng ba", hoChiMinhID, hoChiMinh, hoChiMinhWardID, "Bến Nghé", time.Date(2026, 3, 20, 8, 0, 0, 0, time.UTC)),
+		orderListing("listing-order-5", "Nhà phố Đà Nẵng", daNangID, daNang, daNangWardID, "Hải Châu", time.Date(2026, 4, 15, 8, 0, 0, 0, time.UTC)),
+		orderListing("listing-order-6", "Căn hộ đợt một", hoChiMinhID, hoChiMinh, hoChiMinhWardID, "Bến Nghé", sharedInstant),
+		orderListing("listing-order-7", "Căn hộ đợt hai", hoChiMinhID, hoChiMinh, hoChiMinhWardID, "Bến Nghé", sharedInstant),
 	}
 }
 
 // orderListing builds a valid document with an explicit publication instant.
-func orderListing(listingID, title, city string, published time.Time) marketplace.MarketplaceListingDocument {
+func orderListing(listingID, title, provinceID, provinceName, wardID, wardName string, published time.Time) marketplace.MarketplaceListingDocument {
 	return listingDocument(listingID, func(document *marketplace.MarketplaceListingDocument) {
 		document.Title = title
-		document.City = city
+		document.ProvinceID = provinceID
+		document.ProvinceName = provinceName
+		document.WardID = wardID
+		document.WardName = wardName
 		document.PublishedAt = &published
 	})
 }
