@@ -82,7 +82,8 @@ must arrive as an explicit upstream lifecycle event.
 The canonical document uses snake_case fields and a strict Elasticsearch mapping.
 `price` maps to `long`; `area` maps to `double`; province and ward IDs map to
 `keyword`; province and ward names and address map to analyzed `text` with exact
-`.keyword` subfields; and optional coordinates map to `geo_point`. `projection_state`
+`.keyword` subfields; title/address exact-value limits cover the API's full
+500-character source range; and optional coordinates map to `geo_point`. `projection_state`
 is a strict object for future write metadata. Searchable text uses a case- and
 diacritic-folding analyzer. Shard and replica counts belong to environment or
 index-lifecycle configuration, not this field contract. Unit and real

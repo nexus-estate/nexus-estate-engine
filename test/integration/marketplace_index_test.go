@@ -31,6 +31,7 @@ func TestMarketplaceListingIndexMapping(t *testing.T) {
 	t.Run("mapping applied", func(t *testing.T) { assertAppliedMapping(ctx, t, client) })
 	t.Run("settings applied", func(t *testing.T) { assertAppliedSettings(ctx, t, client) })
 	t.Run("canonical document round trip", func(t *testing.T) { assertDocumentRoundTrip(ctx, t, client) })
+	t.Run("full source length exact keyword values", func(t *testing.T) { assertFullSourceLengthKeywordValues(ctx, t, client) })
 	t.Run("unmapped field rejected", func(t *testing.T) { assertUnmappedFieldRejected(ctx, t, client) })
 	t.Run("unmapped projection state field rejected", func(t *testing.T) { assertUnmappedProjectionStateFieldRejected(ctx, t, client) })
 	t.Run("out of range geo rejected", func(t *testing.T) { assertOutOfRangeGeoRejected(ctx, t, client) })
@@ -54,10 +55,11 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 	}
 
 	type mappedProperty struct {
-		Type       string                    `json:"type"`
-		Dynamic    string                    `json:"dynamic"`
-		Properties map[string]mappedProperty `json:"properties"`
-		Fields     map[string]mappedProperty `json:"fields"`
+		Type        string                    `json:"type"`
+		Dynamic     string                    `json:"dynamic"`
+		IgnoreAbove int                       `json:"ignore_above"`
+		Properties  map[string]mappedProperty `json:"properties"`
+		Fields      map[string]mappedProperty `json:"fields"`
 	}
 	var parsed map[string]struct {
 		Mappings struct {
@@ -94,9 +96,18 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 			t.Fatalf("field %q type = %q, want %q", field, got, wantType)
 		}
 	}
-	for _, field := range []string{"province_name", "ward_name", "address"} {
+	for _, field := range []string{"province_name", "ward_name"} {
 		if got := index.Mappings.Properties[field].Fields["keyword"].Type; got != "keyword" {
 			t.Fatalf("field %q keyword mapping = %q, want keyword", field, got)
+		}
+	}
+	for field, sourceLimit := range map[string]int{
+		"title":   marketplace.MaxMarketplaceTitleLength,
+		"address": marketplace.MaxMarketplaceAddressLength,
+	} {
+		keyword := index.Mappings.Properties[field].Fields["keyword"]
+		if keyword.Type != "keyword" || keyword.IgnoreAbove < sourceLimit {
+			t.Fatalf("field %q keyword mapping = %+v, want keyword ignore_above >= %d", field, keyword, sourceLimit)
 		}
 	}
 	projectionState := index.Mappings.Properties["projection_state"]
@@ -111,6 +122,39 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 	media := index.Mappings.Properties["media"]
 	if media.Properties["images"].Type != "keyword" {
 		t.Fatalf("media mapping = %+v, want keyword images only", media)
+	}
+}
+
+func assertFullSourceLengthKeywordValues(ctx context.Context, t *testing.T, client *es.Client) {
+	t.Helper()
+
+	const listingID = "listing-long-exact-keywords"
+	document := integrationListingDocument(t, listingID, strings.Repeat("T", 300), "Hồ Chí Minh")
+	document.Address = strings.Repeat("A", 400)
+	if len(document.Title) <= 256 || len(document.Title) > marketplace.MaxMarketplaceTitleLength {
+		t.Fatalf("test title length = %d, want 257..%d", len(document.Title), marketplace.MaxMarketplaceTitleLength)
+	}
+	if len(document.Address) <= 256 || len(document.Address) > marketplace.MaxMarketplaceAddressLength {
+		t.Fatalf("test address length = %d, want 257..%d", len(document.Address), marketplace.MaxMarketplaceAddressLength)
+	}
+	seedListingDocuments(ctx, t, client, marketplaceIndexName, document)
+
+	for field, value := range map[string]string{
+		"title.keyword":   document.Title,
+		"address.keyword": document.Address,
+	} {
+		query, err := json.Marshal(map[string]any{
+			"query": map[string]any{
+				"term": map[string]string{field: value},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal exact term query for %s: %v", field, err)
+		}
+		total, ids := searchListingIDs(ctx, t, client, marketplaceIndexName, string(query))
+		if total != 1 || !slices.Equal(ids, []string{listingID}) {
+			t.Errorf("exact term query on %s returned total=%d ids=%v, want listing %q", field, total, ids, listingID)
+		}
 	}
 }
 

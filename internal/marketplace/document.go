@@ -17,6 +17,14 @@ package marketplace
 
 import "time"
 
+// MaxMarketplaceTitleLength and MaxMarketplaceAddressLength mirror the API's
+// varchar(500) source limits. Exact-value keyword mappings must index the full
+// valid source range.
+const (
+	MaxMarketplaceTitleLength   = 500
+	MaxMarketplaceAddressLength = 500
+)
+
 // MaxMarketplaceImages bounds the image URLs copied into a search projection.
 // It is a projection/result-size limit and does not constrain API media storage.
 const MaxMarketplaceImages = 20

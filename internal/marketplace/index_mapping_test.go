@@ -12,11 +12,12 @@ import (
 const listingTextAnalyzer = "listing_text"
 
 type mappedField struct {
-	Type     string                 `json:"type"`
-	Dynamic  string                 `json:"dynamic"`
-	Format   string                 `json:"format"`
-	Analyzer string                 `json:"analyzer"`
-	Fields   map[string]mappedField `json:"fields"`
+	Type        string                 `json:"type"`
+	Dynamic     string                 `json:"dynamic"`
+	Format      string                 `json:"format"`
+	Analyzer    string                 `json:"analyzer"`
+	IgnoreAbove int                    `json:"ignore_above"`
+	Fields      map[string]mappedField `json:"fields"`
 	// Properties is set for object fields.
 	Properties map[string]mappedField `json:"properties"`
 }
@@ -194,6 +195,15 @@ func TestListingIndexDefinitionFieldTypes(t *testing.T) {
 		}
 		if keyword, ok := mapped.Fields["keyword"]; !ok || keyword.Type != "keyword" {
 			t.Fatalf("field %q is missing a keyword subfield: %+v", field, mapped.Fields)
+		}
+	}
+	for field, sourceLimit := range map[string]int{
+		"title":   MaxMarketplaceTitleLength,
+		"address": MaxMarketplaceAddressLength,
+	} {
+		keyword := properties[field].Fields["keyword"]
+		if keyword.IgnoreAbove < sourceLimit {
+			t.Fatalf("field %q keyword ignore_above = %d, want at least API source limit %d", field, keyword.IgnoreAbove, sourceLimit)
 		}
 	}
 
