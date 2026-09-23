@@ -258,8 +258,8 @@ func listingDocument(listingID string, apply func(*marketplace.MarketplaceListin
 		Type:        "house",
 		Purpose:     "sale",
 
-		Price: 1_000_000_000,
-		Area:  100,
+		Price: float64Pointer(1_000_000_000),
+		Area:  float64Pointer(100),
 
 		City:     "Hồ Chí Minh",
 		District: "Quận 1",
@@ -270,13 +270,14 @@ func listingDocument(listingID string, apply func(*marketplace.MarketplaceListin
 
 		Media: marketplace.MediaSummary{Images: []string{"a.jpg"}, CoverImage: "a.jpg"},
 
-		PublishedAt:      &published,
-		UpdatedAt:        &updated,
-		AggregateVersion: 1,
+		PublishedAt: &published,
+		UpdatedAt:   updated,
 	}
 	apply(&document)
 	return document
 }
+
+func float64Pointer(value float64) *float64 { return &value }
 
 func responseError(operation string, res *esapi.Response) error {
 	body, _ := io.ReadAll(res.Body)

@@ -1,16 +1,18 @@
-// Package marketplace owns the canonical Listing-centric projection model that the
-// Engine materializes for indexing, reindex and Search v2.
+// Package marketplace owns the canonical Listing-centric projection contract for
+// future indexing, reindex and marketplace search consumers. No consumer is wired
+// yet; the API must supply authoritative lifecycle and source ordering data first.
 //
 // API/PostgreSQL remains the source of truth; the Engine only owns derived state.
 // A MarketplaceListingDocument is such derived state: a projection may only be
 // created for a listing the API has already confirmed public and searchable, so
 // this model carries no lifecycle status field and never re-derives the
-// publication decision from status. Materializing the document *is* the public
-// assertion.
+// publication decision from status. A future write may materialize the document
+// only in response to that upstream decision.
 //
 // Document identity is the listing id, never the property id: a property is a
-// supply asset and a listing is a marketplace publication of it, and one property
-// can be published more than once.
+// supply asset and a listing is a marketplace publication of it. The API schema
+// currently enforces a unique listing per estate; that database cardinality does
+// not change which domain identity a publication document represents.
 package marketplace
 
 import "time"
@@ -49,39 +51,38 @@ type MarketplaceListingDocument struct {
 	ListingID  string `json:"listing_id"`
 	PropertyID string `json:"property_id"`
 
-	// Searchable content.
+	// Title, Type and Purpose are required source Estate fields. Slug and
+	// Description are optional; Engine must not derive a slug from the title.
 	Title       string `json:"title"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
+	Slug        string `json:"slug,omitempty"`
+	Description string `json:"description,omitempty"`
 	Type        string `json:"type"`
 	Purpose     string `json:"purpose"`
 
-	// Price and Area are range filters. They are non-pointer so the zero value is
-	// a valid "unknown/not provided" price or area rather than an invalid one.
-	Price float64 `json:"price"`
-	Area  float64 `json:"area"`
+	// Price is required by the API estate contract. A non-nil zero is a real zero
+	// price; nil is invalid. Area is nullable in the API; nil means unknown, while
+	// a non-nil value must be positive.
+	Price *float64 `json:"price"`
+	Area  *float64 `json:"area,omitempty"`
 
-	City     string `json:"city"`
-	District string `json:"district"`
-	Ward     string `json:"ward"`
-	Address  string `json:"address"`
+	// City and Ward are API province/ward display names; Address is the source
+	// Estate address. District is optional because the current API has no district
+	// field. Empty values are omitted.
+	City     string `json:"city,omitempty"`
+	District string `json:"district,omitempty"`
+	Ward     string `json:"ward,omitempty"`
+	Address  string `json:"address,omitempty"`
 
 	// Location is absent for listings without a geocoded address.
 	Location *GeoPoint `json:"location,omitempty"`
 
 	Media MediaSummary `json:"media"`
 
-	// PublishedAt is when the listing became public and is the projection's
-	// ordering timestamp. UpdatedAt is the source revision time kept for audit.
-	// Neither is a publication decision the Engine may revise. Callers must
-	// supply UTC instants so the same listing and version always serialize
-	// identically.
+	// PublishedAt is the API Listing.publishedAt instant and the marketplace
+	// recency sort field. It is present only after the API publishes the listing.
+	// UpdatedAt is the API Listing.updatedAt timestamp for audit/display; it is not
+	// monotonic and must never be used for event ordering. Neither timestamp is a
+	// publication decision the Engine may revise.
 	PublishedAt *time.Time `json:"published_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-
-	// AggregateVersion is the monotonic source revision of the listing aggregate
-	// this document was projected from. It orders projection writes; it is not an
-	// event id and must be greater than zero. See IsStaleVersion for the
-	// supersession rule.
-	AggregateVersion int64 `json:"aggregate_version"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

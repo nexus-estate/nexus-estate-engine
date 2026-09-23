@@ -34,8 +34,8 @@ func validDocument() MarketplaceListingDocument {
 		Type:        "villa",
 		Purpose:     "sale",
 
-		Price: 1_250_000_000,
-		Area:  220,
+		Price: floatPtr(1_250_000_000),
+		Area:  floatPtr(220),
 
 		City:     "HCM",
 		District: "1",
@@ -46,9 +46,8 @@ func validDocument() MarketplaceListingDocument {
 
 		Media: MediaSummary{Images: []string{"a.jpg", "b.jpg"}, CoverImage: "a.jpg"},
 
-		PublishedAt:      timePtr(published),
-		UpdatedAt:        timePtr(updated),
-		AggregateVersion: 7,
+		PublishedAt: timePtr(published),
+		UpdatedAt:   updated,
 	}
 }
 
@@ -64,14 +63,23 @@ func TestValidateMarketplaceListingDocument(t *testing.T) {
 		{name: "missing listing id", mutate: func(d *MarketplaceListingDocument) { d.ListingID = "" }, want: ErrMissingListingID, field: "listing_id"},
 		{name: "missing property id", mutate: func(d *MarketplaceListingDocument) { d.PropertyID = "" }, want: ErrMissingPropertyID, field: "property_id"},
 		{name: "missing title", mutate: func(d *MarketplaceListingDocument) { d.Title = "" }, want: ErrMissingTitle, field: "title"},
+		{name: "missing type", mutate: func(d *MarketplaceListingDocument) { d.Type = "" }, want: ErrMissingType, field: "type"},
+		{name: "missing purpose", mutate: func(d *MarketplaceListingDocument) { d.Purpose = "" }, want: ErrMissingPurpose, field: "purpose"},
+		{name: "missing city", mutate: func(d *MarketplaceListingDocument) { d.City = "" }, want: ErrMissingCity, field: "city"},
+		{name: "missing ward", mutate: func(d *MarketplaceListingDocument) { d.Ward = "" }, want: ErrMissingWard, field: "ward"},
+		{name: "missing address", mutate: func(d *MarketplaceListingDocument) { d.Address = "" }, want: ErrMissingAddress, field: "address"},
 		{name: "missing published at", mutate: func(d *MarketplaceListingDocument) { d.PublishedAt = nil }, want: ErrMissingPublishedAt, field: "published_at"},
-		{name: "zero version", mutate: func(d *MarketplaceListingDocument) { d.AggregateVersion = 0 }, want: ErrInvalidVersion, field: "aggregate_version"},
-		{name: "negative version", mutate: func(d *MarketplaceListingDocument) { d.AggregateVersion = -3 }, want: ErrInvalidVersion, field: "aggregate_version"},
-		{name: "negative price", mutate: func(d *MarketplaceListingDocument) { d.Price = -1 }, want: ErrInvalidPrice, field: "price"},
-		{name: "nan price", mutate: func(d *MarketplaceListingDocument) { d.Price = math.NaN() }, want: ErrInvalidPrice, field: "price"},
-		{name: "infinite price", mutate: func(d *MarketplaceListingDocument) { d.Price = math.Inf(1) }, want: ErrInvalidPrice, field: "price"},
-		{name: "negative area", mutate: func(d *MarketplaceListingDocument) { d.Area = -0.5 }, want: ErrInvalidArea, field: "area"},
-		{name: "nan area", mutate: func(d *MarketplaceListingDocument) { d.Area = math.NaN() }, want: ErrInvalidArea, field: "area"},
+		{name: "zero published at", mutate: func(d *MarketplaceListingDocument) { d.PublishedAt = timePtr(time.Time{}) }, want: ErrMissingPublishedAt, field: "published_at"},
+		{name: "missing updated at", mutate: func(d *MarketplaceListingDocument) { d.UpdatedAt = time.Time{} }, want: ErrMissingUpdatedAt, field: "updated_at"},
+		{name: "missing price", mutate: func(d *MarketplaceListingDocument) { d.Price = nil }, want: ErrMissingPrice, field: "price"},
+		{name: "zero price is a valid source value", mutate: func(d *MarketplaceListingDocument) { d.Price = floatPtr(0) }},
+		{name: "negative price", mutate: func(d *MarketplaceListingDocument) { d.Price = floatPtr(-1) }, want: ErrInvalidPrice, field: "price"},
+		{name: "nan price", mutate: func(d *MarketplaceListingDocument) { d.Price = floatPtr(math.NaN()) }, want: ErrInvalidPrice, field: "price"},
+		{name: "infinite price", mutate: func(d *MarketplaceListingDocument) { d.Price = floatPtr(math.Inf(1)) }, want: ErrInvalidPrice, field: "price"},
+		{name: "unknown area is absent", mutate: func(d *MarketplaceListingDocument) { d.Area = nil }},
+		{name: "zero area is invalid when present", mutate: func(d *MarketplaceListingDocument) { d.Area = floatPtr(0) }, want: ErrInvalidArea, field: "area"},
+		{name: "negative area", mutate: func(d *MarketplaceListingDocument) { d.Area = floatPtr(-0.5) }, want: ErrInvalidArea, field: "area"},
+		{name: "nan area", mutate: func(d *MarketplaceListingDocument) { d.Area = floatPtr(math.NaN()) }, want: ErrInvalidArea, field: "area"},
 		{name: "missing longitude", mutate: func(d *MarketplaceListingDocument) { d.Location.Lon = nil }, want: ErrIncompleteGeo, field: "location"},
 		{name: "missing latitude", mutate: func(d *MarketplaceListingDocument) { d.Location.Lat = nil }, want: ErrIncompleteGeo, field: "location"},
 		{name: "latitude above range", mutate: func(d *MarketplaceListingDocument) { d.Location.Lat = floatPtr(90.5) }, want: ErrInvalidLatitude, field: "location.lat"},
@@ -83,7 +91,6 @@ func TestValidateMarketplaceListingDocument(t *testing.T) {
 			name: "identity reported before later violations",
 			mutate: func(d *MarketplaceListingDocument) {
 				d.ListingID = ""
-				d.AggregateVersion = 0
 			},
 			want:  ErrMissingListingID,
 			field: "listing_id",
@@ -128,28 +135,6 @@ func TestValidateMarketplaceListingDocumentAcceptsBoundaryCoordinates(t *testing
 	}
 }
 
-func TestCompareAggregateVersion(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		incoming, indexed int64
-		wantCompare       int
-		wantStale         bool
-	}{
-		{name: "lower is stale", incoming: 3, indexed: 4, wantCompare: -1, wantStale: true},
-		{name: "equal is stale", incoming: 4, indexed: 4, wantCompare: 0, wantStale: true},
-		{name: "higher supersedes", incoming: 5, indexed: 4, wantCompare: 1, wantStale: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := CompareAggregateVersion(tc.incoming, tc.indexed); got != tc.wantCompare {
-				t.Fatalf("CompareAggregateVersion(%d, %d) = %d, want %d", tc.incoming, tc.indexed, got, tc.wantCompare)
-			}
-			if got := IsStaleVersion(tc.incoming, tc.indexed); got != tc.wantStale {
-				t.Fatalf("IsStaleVersion(%d, %d) = %v, want %v", tc.incoming, tc.indexed, got, tc.wantStale)
-			}
-		})
-	}
-}
-
 func TestDocumentJSONContractRoundTrip(t *testing.T) {
 	doc := validDocument()
 
@@ -158,23 +143,26 @@ func TestDocumentJSONContractRoundTrip(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	// Same listing and same version must serialize identically.
+	// The same source snapshot must serialize identically.
 	again, err := json.Marshal(validDocument())
 	if err != nil {
 		t.Fatalf("marshal again: %v", err)
 	}
 	if !bytes.Equal(encoded, again) {
-		t.Fatalf("same listing and version produced different documents:\n%s\n%s", encoded, again)
+		t.Fatalf("same source snapshot produced different documents:\n%s\n%s", encoded, again)
 	}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(encoded, &fields); err != nil {
 		t.Fatalf("unmarshal fields: %v", err)
 	}
-	for _, key := range []string{"listing_id", "property_id", "aggregate_version", "location", "published_at", "media"} {
+	for _, key := range []string{"listing_id", "property_id", "location", "published_at", "updated_at", "media", "price"} {
 		if _, ok := fields[key]; !ok {
 			t.Fatalf("canonical field %q missing from %s", key, encoded)
 		}
+	}
+	if _, ok := fields["aggregate_version"]; ok {
+		t.Fatalf("document must not claim an upstream version the API does not provide: %s", encoded)
 	}
 
 	var decoded MarketplaceListingDocument
@@ -198,5 +186,29 @@ func TestDocumentJSONContractRoundTrip(t *testing.T) {
 
 	if err := ValidateMarketplaceListingDocument(decoded); err != nil {
 		t.Fatalf("decoded document must still validate: %v", err)
+	}
+}
+
+func TestDocumentJSONDistinguishesZeroPriceFromUnknownArea(t *testing.T) {
+	doc := validDocument()
+	doc.Price = floatPtr(0)
+	doc.Area = nil
+
+	encoded, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("unmarshal fields: %v", err)
+	}
+	if got := string(fields["price"]); got != "0" {
+		t.Fatalf("zero price encoded as %q, want 0", got)
+	}
+	if _, ok := fields["area"]; ok {
+		t.Fatalf("unknown area must be omitted, got %s", fields["area"])
+	}
+	if err := ValidateMarketplaceListingDocument(doc); err != nil {
+		t.Fatalf("zero price with unknown area must validate: %v", err)
 	}
 }

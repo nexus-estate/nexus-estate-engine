@@ -8,8 +8,11 @@ import (
 )
 
 func TestMarketplaceDocumentToPropertySearchItem(t *testing.T) {
-	published := time.Date(2026, 2, 3, 4, 5, 6, 0, time.FixedZone("ICT", 7*60*60))
+	published := time.Date(2026, 2, 3, 4, 5, 6, 123_456_789, time.FixedZone("ICT", 7*60*60))
+	updated := time.Date(2026, 2, 4, 0, 0, 0, 0, time.UTC)
 	lat, lon := 10.75, 106.66
+	price := 1250.0
+	area := 220.0
 	doc := marketplace.MarketplaceListingDocument{
 		ListingID:  "listing-1",
 		PropertyID: "property-1",
@@ -20,8 +23,8 @@ func TestMarketplaceDocumentToPropertySearchItem(t *testing.T) {
 		Type:        "villa",
 		Purpose:     "sale",
 
-		Price: 1250,
-		Area:  220,
+		Price: &price,
+		Area:  &area,
 
 		City:     "HCM",
 		District: "1",
@@ -32,8 +35,7 @@ func TestMarketplaceDocumentToPropertySearchItem(t *testing.T) {
 
 		Media:       marketplace.MediaSummary{Images: []string{"a.jpg", "b.jpg"}, CoverImage: "a.jpg"},
 		PublishedAt: &published,
-
-		AggregateVersion: 4,
+		UpdatedAt:   updated,
 	}
 
 	item := MarketplaceDocumentToPropertySearchItem(doc)
@@ -49,7 +51,7 @@ func TestMarketplaceDocumentToPropertySearchItem(t *testing.T) {
 		item.Type != doc.Type || item.Purpose != doc.Purpose {
 		t.Fatalf("text fields not mapped: %+v", item)
 	}
-	if item.Price != doc.Price || item.Area != doc.Area {
+	if item.Price != *doc.Price || item.Area != *doc.Area {
 		t.Fatalf("numeric fields not mapped: %+v", item)
 	}
 	if item.City != doc.City || item.District != doc.District || item.Ward != doc.Ward || item.Address != doc.Address {
@@ -61,9 +63,15 @@ func TestMarketplaceDocumentToPropertySearchItem(t *testing.T) {
 	if len(item.Images) != 2 || item.Images[0] != "a.jpg" || item.Images[1] != "b.jpg" {
 		t.Fatalf("media not mapped: %+v", item)
 	}
-	// Publication time is normalized to UTC so the mapping is deterministic.
-	if want := published.UTC().Format(time.RFC3339); item.PublishedAt != want {
+	// Publication time is normalized to UTC with its fractional precision intact.
+	if want := published.UTC().Format(time.RFC3339Nano); item.PublishedAt != want {
 		t.Fatalf("publishedAt = %q, want %q", item.PublishedAt, want)
+	}
+	if item.PublishedAt[len(item.PublishedAt)-1] != 'Z' {
+		t.Fatalf("publishedAt = %q, want a UTC timestamp", item.PublishedAt)
+	}
+	if item.PublishedAt != "2026-02-02T21:05:06.123456789Z" {
+		t.Fatalf("fractional timestamp precision was not preserved: %q", item.PublishedAt)
 	}
 }
 
@@ -77,5 +85,20 @@ func TestMarketplaceDocumentToPropertySearchItemWithoutOptionalData(t *testing.T
 	}
 	if item.Latitude != 0 || item.Longitude != 0 || item.Images != nil || item.PublishedAt != "" {
 		t.Fatalf("absent optional data must stay empty: %+v", item)
+	}
+}
+
+func TestMarketplaceDocumentToPropertySearchItemCopiesImages(t *testing.T) {
+	doc := marketplace.MarketplaceListingDocument{
+		ListingID:  "listing-images",
+		PropertyID: "property-images",
+		Media:      marketplace.MediaSummary{Images: []string{"original.jpg"}},
+	}
+
+	item := MarketplaceDocumentToPropertySearchItem(doc)
+	item.Images[0] = "mutated.jpg"
+
+	if got := doc.Media.Images[0]; got != "original.jpg" {
+		t.Fatalf("adapter mutation changed source document image to %q", got)
 	}
 }

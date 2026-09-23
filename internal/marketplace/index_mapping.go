@@ -1,29 +1,27 @@
 package marketplace
 
 // ListingIndexDefinition is the canonical create-index request body for the
-// marketplace listing index: the exact JSON to send to PUT /<index>. It mirrors the
-// MarketplaceListingDocument JSON contract field for field, so the model and the
-// definition must change together. Elasticsearch _id must be set from listing_id,
-// because listing id is the document identity.
+// marketplace listing index: the JSON to send to PUT /<index>. Its public listing
+// fields mirror MarketplaceListingDocument; projection_state is reserved
+// write-layer metadata for a future atomic revision/tombstone guard. Elasticsearch
+// _id must be set from listing_id, because listing id is the document identity.
 //
-// Shards, replicas and analysis are part of this contract because they change how
-// the canonical fields are searched. One shard and one replica match the
-// Elasticsearch defaults and are the deliberate starting point: the plan owns index
-// lifecycle and reindexing, not the field contract. The custom listing_text
+// Analysis is included because it changes how canonical text fields are searched.
+// Shard and replica counts are deployment topology and belong in environment or
+// index-lifecycle configuration, not this field contract. The custom listing_text
 // analyzer folds case and diacritics so a query typed without accents still matches
 // accented Vietnamese text. The built-in vietnamese analyzer is not used because
 // its stopword removal drops short, high-intent tokens such as place names.
 //
 // dynamic: strict makes an unmapped field a write error instead of a silent
 // mapping explosion. The Engine is the only writer and every document is validated
-// before the write, so the index must match the canonical contract exactly.
+// before the write. projection_state is a separately mapped internal write shape;
+// a future indexer must still reject unmapped fields in both objects.
 //
 // Index name, lifecycle policy and the write path belong to the indexing plan
 // (ENGINE-02).
 const ListingIndexDefinition = `{
   "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 1,
     "analysis": {
       "analyzer": {
         "listing_text": {
@@ -136,8 +134,17 @@ const ListingIndexDefinition = `{
         "type": "date",
         "format": "strict_date_optional_time||epoch_millis"
       },
-      "aggregate_version": {
-        "type": "long"
+      "projection_state": {
+        "type": "object",
+        "dynamic": "strict",
+        "properties": {
+          "source_revision": {
+            "type": "long"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }

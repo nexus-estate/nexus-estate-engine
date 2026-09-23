@@ -15,56 +15,108 @@ and Elasticsearch query construction. Redis implements the consumer's cache
 interface structurally, without a platform-to-search import. Platform code owns
 technical client setup, logger creation, configuration and process lifecycle.
 
-## Marketplace projection model
+## Marketplace projection foundation
 
-`internal/marketplace` owns the canonical Listing-centric projection document that
-indexing, reindex and Search v2 will materialize. API/PostgreSQL remains the source
-of truth; the Engine owns only derived state. A document may be created only for a
-listing the API has already confirmed public and searchable, so the projection
-carries no lifecycle status field and never re-derives the publication decision
-from status. Materializing the document is the public assertion.
+`internal/marketplace` defines the canonical Listing-centric projection shape for
+future indexing and marketplace search. API/PostgreSQL remains the transactional
+source of truth; Engine owns only derived search state. The projection has no
+status field. Only an upstream API lifecycle decision may cause a listing to be
+materialized or hidden; Engine must not infer public visibility from the presence
+of fields in an Elasticsearch document.
 
-Document identity is `listing_id`. `property_id` describes the underlying supply
-asset and never substitutes for the listing identity, because one property can be
-published more than once. Field names are snake_case and are the canonical
-index/wire contract: identity and `aggregate_version` plus the searchable text,
-range, geo (`location` as the Elasticsearch `geo_point` object form), media
-summary and `published_at`/`updated_at` timestamps. The matching Elasticsearch
-index is checked in as `marketplace.ListingIndexDefinition`: a `dynamic: strict`
-create-index body with one shard, one replica and a case- and diacritic-folding
-text analyzer. A unit test fails when the definition and the document contract
-drift apart. Integration tests create the index in a real Elasticsearch, prove the
-strict and geo contract, and pin a relevance set for Vietnamese compound words,
-unaccented place names and mixed Vietnamese/English listings. The set also records
-where folding is not enough: tokenization is syllable-level, so `match` is
-order-insensitive and a single shared syllable of a multi-syllable place name
-over-matches unless an explicit AND operator or `match_phrase` is used. Folding
-makes the accented and ASCII spellings of one place name collide by design, while
-keyword fields stay exact per source value, so the write layer must send the source
-value for term filters. The same set covers the numeric and geo fields: price and
-area range bounds are asserted to be inclusive, and geo_distance is asserted to
-exclude a listing whose location is absent, including when filters compose.
-Ordering keeps the recency contract v1 applies to its `publishedAt` sort, including
-for filtered and paged results, and extends it to the tuple (`published_at`,
-`listing_id`). v1 sorts by publication time alone, so listings sharing an instant —
-and any page boundary that splits them — have no deterministic order there;
-`listing_id` is the only field that is unique, required and indexed on every
-document, so it is the tiebreaker that closes that gap. The tuple is applied in the
-requested direction, through the query rather than `index.sort`, so scoring behavior
-is unchanged. The index name, lifecycle policy and write path belong to the indexing
-plan.
+`listing_id` is the projection identity, and `property_id` identifies its supply
+asset. The API schema currently enforces a unique Estate id on Listing, so there
+can be at most one Listing row per Estate. Listing and Estate remain distinct
+domain identities, and the publication document is keyed by `listing_id`
+regardless of that current cardinality.
 
-An incoming document whose `aggregate_version` is lower than or equal to the
-already indexed version is stale and must become a no-op; only a greater version
-supersedes the indexed document. `ValidateMarketplaceListingDocument` rejects an
-invalid document before any Elasticsearch write and reports a typed, inspectable
-permanent input error. The helpers are pure, hold no state and are safe for
-concurrent use.
+The source field semantics are:
 
-`internal/search` may consume this model through
-`MarketplaceDocumentToPropertySearchItem`, which keeps the item id equal to the
-listing id, but Search v1 query construction, cache keys, pagination and the
-`nexusestate.search.v1` contract remain unchanged.
+- `listing_id` comes from API `Listing.id`; `property_id` comes from `Estate.id`.
+- Title, type, purpose, price, area, address, province/city, ward and coordinates
+  come from the API Estate snapshot. API requires price and accepts zero as a real
+  value. Area is nullable and, when present, must be positive; nil means unknown
+  and is omitted from the indexed source so range queries do not treat it as 0.
+  Description is nullable and optional.
+- `published_at` is API `Listing.publishedAt`, set by its publish transition.
+  `updated_at` is API `Listing.updatedAt`, carried for audit and never used for
+  ordering. Both must come from the source.
+- The current API Listing/Estate contract has no slug or district field. The
+  producer may pass those fields only when backed by an authoritative API source;
+  Engine must not generate a slug or infer a district. Media lives in API
+  `tbl_media` as estate-owned URLs with type and sort order; the producer must
+  select image URLs by ascending `sort_order` and apply a documented bound. The
+  current API has no cover-image choice, so `cover_image` stays empty unless that
+  choice is made authoritative upstream. Missing optional text/media/geo remains
+  absent.
+
+The API currently implements `DRAFT → PUBLISHED → ARCHIVED` and stores
+`published_at` and `updated_at`, but the inspected API has no transactional
+outbox/event envelope, no monotonic per-listing revision, and no Listing restore
+operation. `updated_at` is an `@UpdateDateColumn`, not a version. Therefore
+indexing cannot be activated until the API publishes an authoritative event or
+snapshot containing the lifecycle decision and a persistent, strictly
+monotonic-per-listing source revision. The revision must advance for every source
+change represented in the projection, including Estate, media and referenced
+location changes, plus publication lifecycle changes, and must be committed
+atomically with the source mutation and its outbox record. Engine must not derive
+it from a timestamp, Kafka offset, random value or local counter. A future restore
+must arrive as an explicit upstream lifecycle event.
+
+The canonical document uses snake_case fields and a strict Elasticsearch mapping.
+Price is required and may be zero. Area is optional and nullable. Geo is an
+optional `geo_point`; media images and cover are bounded source data. Searchable
+text uses a case- and diacritic-folding analyzer. Shard and replica counts belong
+to environment/index-lifecycle configuration, not this canonical field mapping.
+Unit tests check document validation and mapping drift; real Elasticsearch tests
+cover strict mapping, round trip, price/area and geo filters, Vietnamese and mixed
+language relevance, deterministic `published_at`/`listing_id` ordering and
+pagination. The analyzer uses standard syllable tokenization: `match` is
+order-insensitive and common syllables can over-match unless the query uses AND
+or `match_phrase`. Folding intentionally collides accented and ASCII spellings;
+keyword subfields remain exact and filters must use the source value.
+
+### Future durable write ordering
+
+The mapping reserves `projection_state.source_revision` and
+`projection_state.deleted` as internal write metadata. They are deliberately not
+fields on `MarketplaceListingDocument`. `DecideProjectionMutation` is only a pure
+contract helper; it does not establish that a producer revision exists or that
+Elasticsearch writes are already guarded.
+
+The selected future write design is an atomic scripted update of the Elasticsearch
+document whose `_id` is `listing_id`. The script compares the incoming source
+revision with `projection_state.source_revision` and writes the full canonical
+document plus metadata only for a greater revision. An equal revision and same
+lifecycle state is an idempotent no-op; an equal revision with conflicting
+lifecycle state is a producer error; a lower revision is rejected. Every write
+must use this same guard, including retry and reindex writes.
+
+Archive/delete writes a durable tombstone at the same listing `_id`, retaining
+the greatest source revision and setting `deleted: true`. Marketplace queries
+must filter `projection_state.deleted: false`; tombstones are never search
+results. They must not be physically deleted while older events or reindex
+snapshots could still arrive. Thus an archive at revision 12 prevents a delayed
+upsert at revision 11 from recreating the listing. Restore is a higher-revision
+upsert authorized by an explicit API lifecycle event.
+
+Reindex reads a source-consistent checkpoint and carries the same revision and
+lifecycle state as live events. It seeds archived/deleted state as tombstones,
+then replays events after that checkpoint through the same atomic guard before
+switching the read alias. Retried and concurrent operations converge on the
+highest revision for that listing. Equal-revision payload disagreement is a
+source contract violation and must be surfaced rather than silently accepted.
+
+### Search compatibility boundary
+
+Search v1 remains on its legacy `nexus_estate_properties` schema (`id`,
+`publishedAt`), query builder, decoder, sort and production index configuration.
+The marketplace index uses `listing_id`, `published_at` and a distinct
+`projection_state` filter. It needs its own query builder and decoder before it
+can serve Search v1 or Search v2 requests. `MarketplaceDocumentToPropertySearchItem`
+is only a response-shape compatibility primitive; no production Search v1 read
+path calls it. Search v1 must not be pointed at the marketplace index by changing
+only its index name.
 
 The Search contract and data remain compatible. Pagination defaults to page 1 and
 20 items; Elasticsearch filters, publishedAt descending sort and the Redis cache

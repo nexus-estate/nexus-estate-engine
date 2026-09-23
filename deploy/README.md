@@ -44,16 +44,21 @@ SEARCH_INTEGRATION_ADDR=localhost:50052 SEARCH_EXPECT_NOT_SERVING=1 go test -cou
 # Verify fallback after optional Redis becomes unavailable:
 docker compose -p nexus-foundation-check stop redis
 SEARCH_INTEGRATION_ADDR=localhost:50052 go test -count=1 ./test/integration
-# Create the marketplace listing index from the checked-in definition in the test
-# Elasticsearch, verify the canonical document contract and the search gates:
+# Create isolated marketplace indexes in this disposable test Elasticsearch and
+# verify mapping, validation, filtering, relevance, ordering and paging contracts.
+# Never point this gate at a production or development Elasticsearch cluster.
 MARKETPLACE_INTEGRATION_ES_ADDR=http://localhost:19200 go test -count=1 -run '^TestMarketplaceListing' ./test/integration
 # Stop only the test project's containers; volumes are retained.
 docker compose -p nexus-foundation-check down
 ```
 
 This checks standard gRPC readiness and the original SearchProperties RPC against
-real Elasticsearch. `MARKETPLACE_INTEGRATION_ES_ADDR` is the test Elasticsearch
-URL, and the marketplace tests create only their own
-`nexus_estate_marketplace_*_integration` indexes, which they delete after the run.
+real Elasticsearch. `MARKETPLACE_INTEGRATION_ES_ADDR` must point to a disposable
+test Elasticsearch: marketplace tests create only their own
+`nexus_estate_marketplace_*_integration` indexes, verify the canonical mapping and
+search behavior, then delete each index. CI supplies a private Compose Elasticsearch
+instance and fails if the marketplace tests are skipped. Projection ordering remains
+inactive until the API provides a monotonic per-listing source revision with
+lifecycle events or snapshots; see [the architecture contract](../docs/architecture.md).
 The default unit/race suite requires no external services; shutdown unit tests also
 exercise a blocked RPC and deadline-based forced stop.

@@ -32,6 +32,7 @@ func TestMarketplaceListingIndexMapping(t *testing.T) {
 	t.Run("settings applied", func(t *testing.T) { assertAppliedSettings(ctx, t, client) })
 	t.Run("canonical document round trip", func(t *testing.T) { assertDocumentRoundTrip(ctx, t, client) })
 	t.Run("unmapped field rejected", func(t *testing.T) { assertUnmappedFieldRejected(ctx, t, client) })
+	t.Run("unmapped projection state field rejected", func(t *testing.T) { assertUnmappedProjectionStateFieldRejected(ctx, t, client) })
 	t.Run("out of range geo rejected", func(t *testing.T) { assertOutOfRangeGeoRejected(ctx, t, client) })
 }
 
@@ -53,7 +54,9 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 	}
 
 	type mappedProperty struct {
-		Type string `json:"type"`
+		Type       string                    `json:"type"`
+		Dynamic    string                    `json:"dynamic"`
+		Properties map[string]mappedProperty `json:"properties"`
 	}
 	var parsed map[string]struct {
 		Mappings struct {
@@ -72,21 +75,35 @@ func assertAppliedMapping(ctx context.Context, t *testing.T, client *es.Client) 
 		t.Fatalf("dynamic = %q, want strict", index.Mappings.Dynamic)
 	}
 	for field, wantType := range map[string]string{
-		"listing_id":        "keyword",
-		"property_id":       "keyword",
-		"location":          "geo_point",
-		"aggregate_version": "long",
-		"published_at":      "date",
+		"listing_id":   "keyword",
+		"property_id":  "keyword",
+		"title":        "text",
+		"price":        "double",
+		"area":         "double",
+		"location":     "geo_point",
+		"published_at": "date",
+		"updated_at":   "date",
 	} {
 		if got := index.Mappings.Properties[field].Type; got != wantType {
 			t.Fatalf("field %q type = %q, want %q", field, got, wantType)
 		}
 	}
+	projectionState := index.Mappings.Properties["projection_state"]
+	// Elasticsearch omits the implicit object type from its normalized mapping
+	// response, but the nested properties and dynamic mode must still be present.
+	if (projectionState.Type != "" && projectionState.Type != "object") || projectionState.Dynamic != "strict" ||
+		projectionState.Properties["source_revision"].Type != "long" ||
+		projectionState.Properties["deleted"].Type != "boolean" {
+		t.Fatalf("projection_state mapping = %+v, want strict source_revision/deleted object", projectionState)
+	}
+	media := index.Mappings.Properties["media"]
+	if media.Properties["images"].Type != "keyword" || media.Properties["cover_image"].Type != "keyword" {
+		t.Fatalf("media mapping = %+v, want keyword images and cover_image", media)
+	}
 }
 
-// assertAppliedSettings reads shards, replicas and the analyzer back from the
-// cluster, so a settings block the cluster rejects or normalizes cannot pass as the
-// checked-in contract.
+// assertAppliedSettings reads the analyzer back from the cluster, so settings the
+// cluster rejects or normalizes cannot pass as the checked-in search contract.
 func assertAppliedSettings(ctx context.Context, t *testing.T, client *es.Client) {
 	t.Helper()
 
@@ -110,9 +127,7 @@ func assertAppliedSettings(ctx context.Context, t *testing.T, client *es.Client)
 	var parsed map[string]struct {
 		Settings struct {
 			Index struct {
-				NumberOfShards   string `json:"number_of_shards"`
-				NumberOfReplicas string `json:"number_of_replicas"`
-				Analysis         struct {
+				Analysis struct {
 					Analyzer map[string]appliedAnalyzer `json:"analyzer"`
 				} `json:"analysis"`
 			} `json:"index"`
@@ -127,10 +142,6 @@ func assertAppliedSettings(ctx context.Context, t *testing.T, client *es.Client)
 	}
 
 	settings := index.Settings.Index
-	if settings.NumberOfShards != "1" || settings.NumberOfReplicas != "1" {
-		t.Fatalf("shards/replicas = %q/%q, want 1/1", settings.NumberOfShards, settings.NumberOfReplicas)
-	}
-
 	analyzer, ok := settings.Analysis.Analyzer["listing_text"]
 	if !ok {
 		t.Fatalf("analyzer listing_text is not applied: %+v", settings.Analysis.Analyzer)
@@ -196,7 +207,7 @@ func assertUnmappedFieldRejected(ctx context.Context, t *testing.T, client *es.C
 	t.Helper()
 
 	const documentID = "strict-mapping-check"
-	payload := `{"listing_id":"` + documentID + `","property_id":"property-1","aggregate_version":1,"unmapped_field":"value"}`
+	payload := `{"listing_id":"` + documentID + `","property_id":"property-1","unmapped_field":"value"}`
 
 	res, err := client.Index(
 		marketplaceIndexName,
@@ -215,11 +226,34 @@ func assertUnmappedFieldRejected(ctx context.Context, t *testing.T, client *es.C
 	}
 }
 
+func assertUnmappedProjectionStateFieldRejected(ctx context.Context, t *testing.T, client *es.Client) {
+	t.Helper()
+
+	const documentID = "strict-projection-state-check"
+	payload := `{"listing_id":"` + documentID + `","projection_state":{"source_revision":1,"deleted":true,"unexpected":"value"}}`
+
+	res, err := client.Index(
+		marketplaceIndexName,
+		strings.NewReader(payload),
+		client.Index.WithContext(ctx),
+		client.Index.WithDocumentID(documentID),
+		client.Index.WithRefresh("true"),
+	)
+	if err != nil {
+		t.Fatalf("index unmapped projection state field: %v", err)
+	}
+	defer closeResponse(res)
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "strict_dynamic_mapping_exception") {
+		t.Fatalf("projection_state must reject unmapped fields: status=%s body=%s", res.Status(), body)
+	}
+}
+
 func assertOutOfRangeGeoRejected(ctx context.Context, t *testing.T, client *es.Client) {
 	t.Helper()
 
 	const documentID = "geo-range-check"
-	payload := `{"listing_id":"` + documentID + `","property_id":"property-1","aggregate_version":1,"location":{"lat":91,"lon":106.66}}`
+	payload := `{"listing_id":"` + documentID + `","property_id":"property-1","location":{"lat":91,"lon":106.66}}`
 
 	res, err := client.Index(
 		marketplaceIndexName,
@@ -255,8 +289,8 @@ func integrationListingDocument(t *testing.T, listingID, title, city string) mar
 		Type:        "villa",
 		Purpose:     "sale",
 
-		Price: 1_250_000_000,
-		Area:  220,
+		Price: float64Pointer(1_250_000_000),
+		Area:  float64Pointer(220),
 
 		City:     city,
 		District: "1",
@@ -267,9 +301,8 @@ func integrationListingDocument(t *testing.T, listingID, title, city string) mar
 
 		Media: marketplace.MediaSummary{Images: []string{"a.jpg", "b.jpg"}, CoverImage: "a.jpg"},
 
-		PublishedAt:      &published,
-		UpdatedAt:        &updated,
-		AggregateVersion: 7,
+		PublishedAt: &published,
+		UpdatedAt:   updated,
 	}
 	if err := marketplace.ValidateMarketplaceListingDocument(document); err != nil {
 		t.Fatalf("integration fixture must be a valid document: %v", err)

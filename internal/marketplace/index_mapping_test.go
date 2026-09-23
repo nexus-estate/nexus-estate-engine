@@ -13,6 +13,7 @@ const listingTextAnalyzer = "listing_text"
 
 type mappedField struct {
 	Type     string                 `json:"type"`
+	Dynamic  string                 `json:"dynamic"`
 	Format   string                 `json:"format"`
 	Analyzer string                 `json:"analyzer"`
 	Fields   map[string]mappedField `json:"fields"`
@@ -21,9 +22,7 @@ type mappedField struct {
 }
 
 type mappingSettings struct {
-	NumberOfShards   int `json:"number_of_shards"`
-	NumberOfReplicas int `json:"number_of_replicas"`
-	Analysis         struct {
+	Analysis struct {
 		Analyzer map[string]struct {
 			Type      string   `json:"type"`
 			Tokenizer string   `json:"tokenizer"`
@@ -99,9 +98,28 @@ func TestListingIndexDefinitionMatchesDocumentContract(t *testing.T) {
 	}
 
 	want := documentJSONNames(t, reflect.TypeOf(MarketplaceListingDocument{}))
-	got := mappedNames(definition.Mappings.Properties)
+	listingProperties := make(map[string]mappedField, len(definition.Mappings.Properties))
+	for name, field := range definition.Mappings.Properties {
+		if name != "projection_state" {
+			listingProperties[name] = field
+		}
+	}
+	got := mappedNames(listingProperties)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("mapped fields must match the document contract exactly:\ngot  %v\nwant %v", got, want)
+	}
+
+	state, ok := definition.Mappings.Properties["projection_state"]
+	if !ok || state.Type != "object" || state.Dynamic != "strict" {
+		t.Fatalf("projection_state must be a strict object, got %+v", state)
+	}
+	wantState := documentJSONNames(t, reflect.TypeOf(ProjectionState{}))
+	gotState := mappedNames(state.Properties)
+	if !reflect.DeepEqual(gotState, wantState) {
+		t.Fatalf("projection_state fields must match ordering metadata:\ngot  %v\nwant %v", gotState, wantState)
+	}
+	if state.Properties["source_revision"].Type != "long" || state.Properties["deleted"].Type != "boolean" {
+		t.Fatalf("projection_state field types are invalid: %+v", state.Properties)
 	}
 
 	media, ok := definition.Mappings.Properties["media"]
@@ -117,15 +135,6 @@ func TestListingIndexDefinitionMatchesDocumentContract(t *testing.T) {
 
 func TestListingIndexDefinitionSettings(t *testing.T) {
 	settings := parseIndexDefinition(t).Settings
-
-	// One shard and one replica match the Elasticsearch defaults and are the
-	// deliberate starting point for the indexing plan.
-	if settings.NumberOfShards != 1 {
-		t.Fatalf("number_of_shards = %d, want 1", settings.NumberOfShards)
-	}
-	if settings.NumberOfReplicas != 1 {
-		t.Fatalf("number_of_replicas = %d, want 1", settings.NumberOfReplicas)
-	}
 
 	analyzer, ok := settings.Analysis.Analyzer[listingTextAnalyzer]
 	if !ok {
@@ -146,18 +155,17 @@ func TestListingIndexDefinitionFieldTypes(t *testing.T) {
 	properties := definition.Mappings.Properties
 
 	for field, wantType := range map[string]string{
-		"listing_id":        "keyword",
-		"property_id":       "keyword",
-		"slug":              "keyword",
-		"type":              "keyword",
-		"purpose":           "keyword",
-		"description":       "text",
-		"price":             "double",
-		"area":              "double",
-		"location":          "geo_point",
-		"aggregate_version": "long",
-		"published_at":      "date",
-		"updated_at":        "date",
+		"listing_id":   "keyword",
+		"property_id":  "keyword",
+		"slug":         "keyword",
+		"type":         "keyword",
+		"purpose":      "keyword",
+		"description":  "text",
+		"price":        "double",
+		"area":         "double",
+		"location":     "geo_point",
+		"published_at": "date",
+		"updated_at":   "date",
 	} {
 		got, ok := properties[field]
 		if !ok {

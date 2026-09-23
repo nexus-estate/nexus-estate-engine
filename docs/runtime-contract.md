@@ -28,6 +28,20 @@ no business RPCs until a real synchronous module is introduced.
 Worker starts, remains idle without a busy loop, handles signals, and exits
 within a bounded shutdown timeout; it has no public Service by default.
 
+## Marketplace projection status
+
+The canonical listing document and strict index mapping are implemented as
+foundation contracts only. No indexing consumer, projection write path, or
+marketplace query/decoder is active. API/PostgreSQL remains canonical. The
+current API has publish/archive commands but no outbox/event envelope and no
+monotonic per-listing source revision; Engine must not synthesize one from
+`updated_at`, Kafka offsets, or local state. Indexing remains gated on that
+producer contract and on a durable revision-guarded tombstone write path.
+
+Search v1 stays on the legacy `id`/`publishedAt` index and query schema. The
+marketplace index has different field names and requires a dedicated repository
+path before serving marketplace search traffic.
+
 The infra repository owns immutable image selection and ArgoCD rollout. This
 repository never applies Kubernetes manifests or invokes ArgoCD. Keep the
 legacy Search Service alias only during consumer migration; it is not a

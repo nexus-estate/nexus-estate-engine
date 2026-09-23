@@ -30,7 +30,7 @@ func TestMarketplaceListingSearchFilters(t *testing.T) {
 		{
 			name:    "price upper bound is inclusive",
 			query:   `{"range":{"price":{"lte":2500000000}}}`,
-			wantIDs: []string{"listing-filter-1", "listing-filter-2", "listing-filter-zero-price"},
+			wantIDs: []string{"listing-filter-1", "listing-filter-2", "listing-filter-zero-price", "listing-filter-area-unknown"},
 		},
 		{
 			name:    "price between both bounds",
@@ -51,6 +51,11 @@ func TestMarketplaceListingSearchFilters(t *testing.T) {
 			name:    "area bounds include fractional endpoints",
 			query:   `{"range":{"area":{"gte":50,"lte":120.5}}}`,
 			wantIDs: []string{"listing-filter-1", "listing-filter-2", "listing-filter-hanoi", "listing-filter-no-geo"},
+		},
+		{
+			name:    "area range excludes unknown area rather than treating it as zero",
+			query:   `{"range":{"area":{"gte":0}}}`,
+			wantIDs: []string{"listing-filter-1", "listing-filter-2", "listing-filter-3", "listing-filter-hanoi", "listing-filter-zero-price", "listing-filter-no-geo"},
 		},
 		{
 			name:    "area strictly greater excludes the fractional boundary",
@@ -98,6 +103,9 @@ func relevanceFilterListings() []marketplace.MarketplaceListingDocument {
 	districtSevenLatitude, districtSevenLongitude := 10.7300, 106.7200
 	hanoiLatitude, hanoiLongitude := 21.0278, 105.8342
 
+	unknownArea := filterListing("listing-filter-area-unknown", "Căn hộ chưa rõ diện tích", 500_000_000, 1, nil, nil)
+	unknownArea.Area = nil
+
 	return []marketplace.MarketplaceListingDocument{
 		filterListing("listing-filter-1", "Căn hộ Quận 1", 1_000_000_000, 50, &districtOneLatitude, &districtOneLongitude),
 		filterListing("listing-filter-2", "Căn hộ Thảo Điền", 2_500_000_000, 120.5, &thaoDienLatitude, &thaoDienLongitude),
@@ -105,6 +113,7 @@ func relevanceFilterListings() []marketplace.MarketplaceListingDocument {
 		filterListing("listing-filter-hanoi", "Nhà phố Hà Nội", 4_000_000_000, 70, &hanoiLatitude, &hanoiLongitude),
 		filterListing("listing-filter-zero-price", "Đất nền Quận 2", 0, 25, nil, nil),
 		filterListing("listing-filter-no-geo", "Căn hộ Quận 4", 3_000_000_000, 80, nil, nil),
+		unknownArea,
 	}
 }
 
@@ -113,8 +122,8 @@ func relevanceFilterListings() []marketplace.MarketplaceListingDocument {
 func filterListing(listingID, title string, price, area float64, latitude, longitude *float64) marketplace.MarketplaceListingDocument {
 	return listingDocument(listingID, func(document *marketplace.MarketplaceListingDocument) {
 		document.Title = title
-		document.Price = price
-		document.Area = area
+		document.Price = float64Pointer(price)
+		document.Area = float64Pointer(area)
 		document.Location = nil
 		if latitude != nil && longitude != nil {
 			document.Location = &marketplace.GeoPoint{Lat: latitude, Lon: longitude}
