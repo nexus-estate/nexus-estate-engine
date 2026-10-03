@@ -124,8 +124,21 @@ regenerates, and runs `git diff --exit-code -- proto gen` before tests.
 
 `cmd/*` contains process entry points; `internal/app` composes each runtime.
 Search models, repository interface, Elasticsearch query adapter and gRPC adapter
-live together in `internal/search`. Technical config, logging, client setup,
-gRPC lifecycle and shutdown live in `internal/platform`.
+live together in `internal/search`. The canonical Listing-centric projection
+document and strict Elasticsearch mapping live in `internal/marketplace`. They
+are foundation contracts; no marketplace indexing consumer or marketplace Search
+query path is active. The API currently provides no monotonic listing revision or
+transactional outbox, so indexing must wait for that upstream contract. Search v1
+keeps its legacy `id`/`publishedAt` schema, query path and configured index. The
+canonical marketplace document preserves the API's uppercase type/purpose enums,
+province/ward IDs and names, and bigint price as `int64`/Elasticsearch `long`.
+The API currently exposes bigint through TypeScript `number`, so the future
+producer must preserve large integer precision or constrain values to safe
+integers.
+The Search v1 adapter maps province/ward names to legacy response fields and
+converts price to `float64` at that boundary; it is a lossy response-shape
+compatibility primitive, not an index decoder or query layer. Technical config,
+logging, client setup, gRPC lifecycle and shutdown live in `internal/platform`.
 
 Add a bounded module only when a concrete feature needs it. Keep domain behavior
 inside that module and wire it in an app composition root. Do not add empty future
